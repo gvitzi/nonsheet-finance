@@ -22,6 +22,9 @@ export const WEALTH_DOC_LOADED_EVENT = 'nonsheet-finance:wealth-doc-loaded'
 
 export type WealthDocLoadedSource = 'browser-cache' | 'import'
 
+/** Fired when the app should surface a short-lived error row in the notifications panel. */
+export const WEALTH_APP_ERROR_NOTIFICATION_EVENT = 'nonsheet-finance:wealth-app-error-notification'
+
 /** @deprecated Use `PORTFOLIOS_UPDATED_EVENT` (same channel). */
 export const GROUPS_UPDATED_EVENT = PORTFOLIOS_UPDATED_EVENT
 

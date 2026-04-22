@@ -1,7 +1,12 @@
 import type { ReactNode } from 'react'
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createEmptyWealthDocument, parseWealthDocument, stringifyWealthDocument } from '@nonsheet-finance/core'
-import { PORTFOLIOS_UPDATED_EVENT, WEALTH_DOC_LOADED_EVENT, type WealthDocLoadedSource } from './groupKinds'
+import {
+  PORTFOLIOS_UPDATED_EVENT,
+  WEALTH_APP_ERROR_NOTIFICATION_EVENT,
+  WEALTH_DOC_LOADED_EVENT,
+  type WealthDocLoadedSource,
+} from './groupKinds'
 import {
   clearBrowserCacheDocument,
   readBrowserCacheDocument,
@@ -53,6 +58,22 @@ export function WealthStoreProvider({ children }: { children: ReactNode }) {
   })
   const autoRestoredFromCacheRef = useRef(documentSessionReady)
   const welcomePrimaryRef = useRef<HTMLButtonElement>(null)
+  const lastBrowserCacheFailNotifyAtRef = useRef(0)
+
+  const dispatchAppErrorNotification = useCallback((message: string) => {
+    window.dispatchEvent(
+      new CustomEvent<{ message: string }>(WEALTH_APP_ERROR_NOTIFICATION_EVENT, { detail: { message } }),
+    )
+  }, [])
+
+  const notifyBrowserCacheWriteFailed = useCallback(() => {
+    const now = Date.now()
+    if (now - lastBrowserCacheFailNotifyAtRef.current < 90_000) return
+    lastBrowserCacheFailNotifyAtRef.current = now
+    dispatchAppErrorNotification(
+      'Could not save a browser backup copy (storage may be full or blocked). Your changes still work in this tab; export regularly from the menu.',
+    )
+  }, [dispatchAppErrorNotification])
 
   useEffect(() => {
     return subscribeWealthDocStore(() => setDirty(isWealthDocStoreDirty()))
@@ -72,8 +93,8 @@ export function WealthStoreProvider({ children }: { children: ReactNode }) {
   /** After the user picks a source, keep a debounced copy in localStorage for the next visit. */
   useEffect(() => {
     if (!documentSessionReady) return
-    writeBrowserCacheDocument(getWealthDocument())
-  }, [documentSessionReady])
+    if (!writeBrowserCacheDocument(getWealthDocument())) notifyBrowserCacheWriteFailed()
+  }, [documentSessionReady, notifyBrowserCacheWriteFailed])
 
   useEffect(() => {
     if (!documentSessionReady) return
@@ -81,14 +102,14 @@ export function WealthStoreProvider({ children }: { children: ReactNode }) {
     const unsub = subscribeWealthDocStore(() => {
       if (t) clearTimeout(t)
       t = setTimeout(() => {
-        writeBrowserCacheDocument(getWealthDocument())
+        if (!writeBrowserCacheDocument(getWealthDocument())) notifyBrowserCacheWriteFailed()
       }, 400)
     })
     return () => {
       unsub()
       if (t) clearTimeout(t)
     }
-  }, [documentSessionReady])
+  }, [documentSessionReady, notifyBrowserCacheWriteFailed])
 
   useLayoutEffect(() => {
     if (documentSessionReady) return
@@ -136,12 +157,13 @@ export function WealthStoreProvider({ children }: { children: ReactNode }) {
           )
           opts?.onLoaded?.()
         } catch (e) {
-          window.alert(e instanceof Error ? e.message : 'Invalid file')
+          const msg = e instanceof Error ? e.message : 'Invalid file'
+          dispatchAppErrorNotification(`Could not import the JSON file: ${msg}`)
         }
       })
     }
     input.click()
-  }, [])
+  }, [dispatchAppErrorNotification])
 
   const beginEmptyDocumentSession = useCallback(() => {
     clearBrowserCacheDocument()
