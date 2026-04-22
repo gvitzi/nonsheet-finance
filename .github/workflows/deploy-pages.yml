@@ -1,8 +1,14 @@
+# Deploy static build (static-app/) to GitHub Pages.
+#
+# - Direct pushes to main or master deploy.
+# - Merging a PR into main or master also creates a push to that branch, so merges
+#   deploy automatically without a separate pull_request workflow (which would double-run).
 name: Deploy to GitHub Pages
 
 on:
   push:
     branches:
+      - main
       - master
 
 concurrency:
