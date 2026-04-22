@@ -45,15 +45,25 @@ a {
 body {
   margin: 0;
   min-width: 320px;
-  min-height: 100vh;
   background: var(--color-page);
   color: var(--color-text);
 }
 
-.app-shell {
-  min-height: 100vh;
+/* Single flex child under #root so titlebar + main fill the viewport (see index.css). */
+.app-viewport {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+
+.app-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--color-page);
 }
 
@@ -684,11 +694,15 @@ body {
   flex: 1;
   display: flex;
   min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar {
   flex-shrink: 0;
+  align-self: stretch;
   width: var(--sidebar-width);
+  max-height: 100%;
+  min-height: 0;
   background: var(--color-surface);
   border-right: 1px solid var(--color-border);
   display: flex;
@@ -974,6 +988,7 @@ body {
 .content {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   padding: 1.5rem;
   overflow-x: hidden;
   overflow-y: auto;

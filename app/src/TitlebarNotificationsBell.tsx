@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { computeStaleDataNotifications, type WealthAppNotification } from '@nonsheet-finance/core'
+import { WEALTH_DOC_LOADED_EVENT, type WealthDocLoadedSource } from './groupKinds'
 import { getWealthDocument, subscribeWealthDocStore } from './wealthDocStore'
 import { useWealthFile } from './WealthStoreProvider'
+
+function messageForDocLoaded(source: WealthDocLoadedSource): string {
+  return source === 'browser-cache'
+    ? 'Data loaded from local browser cache'
+    : 'Data loaded from imported file'
+}
 
 function IconBell() {
   return (
@@ -23,11 +30,28 @@ export function TitlebarNotificationsBell() {
   const wealthFile = useWealthFile()
   const [open, setOpen] = useState(false)
   const [docGen, setDocGen] = useState(0)
+  const [docLoadedNotices, setDocLoadedNotices] = useState<WealthAppNotification[]>([])
   const wrapRef = useRef<HTMLDivElement>(null)
   const location = useLocation()
 
   useEffect(() => {
     return subscribeWealthDocStore(() => setDocGen((g) => g + 1))
+  }, [])
+
+  useEffect(() => {
+    const onLoaded = (e: Event) => {
+      const ce = e as CustomEvent<{ source: WealthDocLoadedSource }>
+      const source = ce.detail?.source
+      if (source !== 'browser-cache' && source !== 'import') return
+      const id = `doc-loaded-${Date.now()}`
+      const item: WealthAppNotification = { id, message: messageForDocLoaded(source) }
+      setDocLoadedNotices((prev) => [...prev, item])
+      window.setTimeout(() => {
+        setDocLoadedNotices((prev) => prev.filter((n) => n.id !== id))
+      }, 8000)
+    }
+    window.addEventListener(WEALTH_DOC_LOADED_EVENT, onLoaded)
+    return () => window.removeEventListener(WEALTH_DOC_LOADED_EVENT, onLoaded)
   }, [])
 
   useEffect(() => {
@@ -54,7 +78,7 @@ export function TitlebarNotificationsBell() {
   const notifications = useMemo((): WealthAppNotification[] => {
     const doc = getWealthDocument()
     const stale = computeStaleDataNotifications(doc)
-    const items: WealthAppNotification[] = []
+    const items: WealthAppNotification[] = [...docLoadedNotices]
     if (wealthFile.dirty) {
       items.push({
         id: 'unsaved',
@@ -64,7 +88,7 @@ export function TitlebarNotificationsBell() {
     }
     items.push(...stale)
     return items
-  }, [docGen, wealthFile.dirty])
+  }, [docGen, docLoadedNotices, wealthFile.dirty])
 
   const count = notifications.length
   const badgeLabel = count > 99 ? '99+' : String(count)

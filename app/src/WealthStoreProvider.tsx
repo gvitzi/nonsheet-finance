@@ -1,10 +1,9 @@
 import type { ReactNode } from 'react'
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createEmptyWealthDocument, parseWealthDocument, stringifyWealthDocument } from '@nonsheet-finance/core'
-import { PORTFOLIOS_UPDATED_EVENT } from './groupKinds'
+import { PORTFOLIOS_UPDATED_EVENT, WEALTH_DOC_LOADED_EVENT, type WealthDocLoadedSource } from './groupKinds'
 import {
   clearBrowserCacheDocument,
-  formatBrowserCacheSavedLabel,
   readBrowserCacheDocument,
   writeBrowserCacheDocument,
 } from './wealthDocBrowserCache'
@@ -45,12 +44,29 @@ function downloadJson(filename: string, text: string) {
 export function WealthStoreProvider({ children }: { children: ReactNode }) {
   const [dirty, setDirty] = useState(isWealthDocStoreDirty)
   /** Until true, user must pick a JSON file or start an empty document (welcome overlay). */
-  const [documentSessionReady, setDocumentSessionReady] = useState(false)
+  const [documentSessionReady, setDocumentSessionReady] = useState(() => {
+    const cached = readBrowserCacheDocument()
+    if (!cached) return false
+    setWealthFileHandle(null)
+    replaceWealthDocument(cached.doc, { markDirty: false })
+    return true
+  })
+  const autoRestoredFromCacheRef = useRef(documentSessionReady)
   const welcomePrimaryRef = useRef<HTMLButtonElement>(null)
-  const welcomeBrowserCache = useMemo(() => readBrowserCacheDocument(), [documentSessionReady])
 
   useEffect(() => {
     return subscribeWealthDocStore(() => setDirty(isWealthDocStoreDirty()))
+  }, [])
+
+  useEffect(() => {
+    if (!autoRestoredFromCacheRef.current) return
+    autoRestoredFromCacheRef.current = false
+    window.dispatchEvent(new CustomEvent(PORTFOLIOS_UPDATED_EVENT))
+    window.dispatchEvent(
+      new CustomEvent<{ source: WealthDocLoadedSource }>(WEALTH_DOC_LOADED_EVENT, {
+        detail: { source: 'browser-cache' },
+      }),
+    )
   }, [])
 
   /** After the user picks a source, keep a debounced copy in localStorage for the next visit. */
@@ -71,15 +87,6 @@ export function WealthStoreProvider({ children }: { children: ReactNode }) {
     return () => {
       unsub()
       if (t) clearTimeout(t)
-    }
-  }, [documentSessionReady])
-
-  useEffect(() => {
-    if (documentSessionReady) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = prev
     }
   }, [documentSessionReady])
 
@@ -122,6 +129,11 @@ export function WealthStoreProvider({ children }: { children: ReactNode }) {
           replaceWealthDocument(parsed, { markDirty: false })
           setWealthFileHandle(null)
           window.dispatchEvent(new CustomEvent(PORTFOLIOS_UPDATED_EVENT))
+          window.dispatchEvent(
+            new CustomEvent<{ source: WealthDocLoadedSource }>(WEALTH_DOC_LOADED_EVENT, {
+              detail: { source: 'import' },
+            }),
+          )
           opts?.onLoaded?.()
         } catch (e) {
           window.alert(e instanceof Error ? e.message : 'Invalid file')
@@ -135,19 +147,6 @@ export function WealthStoreProvider({ children }: { children: ReactNode }) {
     clearBrowserCacheDocument()
     setWealthFileHandle(null)
     replaceWealthDocument(createEmptyWealthDocument(), { markDirty: false })
-    window.dispatchEvent(new CustomEvent(PORTFOLIOS_UPDATED_EVENT))
-    setDocumentSessionReady(true)
-  }, [])
-
-  const continueFromBrowserCache = useCallback(() => {
-    const cached = readBrowserCacheDocument()
-    if (!cached) {
-      window.alert('No saved copy found in this browser.')
-      return
-    }
-    setWealthFileHandle(null)
-    // Same baseline as Import: the browser cache is the restored session, not an in-flight edit.
-    replaceWealthDocument(cached.doc, { markDirty: false })
     window.dispatchEvent(new CustomEvent(PORTFOLIOS_UPDATED_EVENT))
     setDocumentSessionReady(true)
   }, [])
@@ -166,50 +165,41 @@ export function WealthStoreProvider({ children }: { children: ReactNode }) {
 
   return (
     <WealthFileContext.Provider value={value}>
-      {children}
-      {!documentSessionReady ? (
-        <div className="welcome-doc-overlay" role="presentation">
-          <div
-            className="welcome-doc-backdrop"
-            aria-hidden
-          />
-          <div
-            className="welcome-doc-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="welcome-doc-title"
-            aria-describedby="welcome-doc-desc"
-          >
-            <h1 id="welcome-doc-title" className="welcome-doc-title">
-              Choose your data file
-            </h1>
-            <p id="welcome-doc-desc" className="welcome-doc-desc">
-              This app keeps everything in one JSON file. While you work, a copy is also kept in this browser (local storage) so you can pick up where you left off after a refresh. Load a file from disk, restore that browser copy, or start fresh.
-            </p>
-            <div className="welcome-doc-actions">
-              <button
-                type="button"
-                className="btn btn-primary welcome-doc-btn"
-                ref={welcomePrimaryRef}
-                onClick={() => openFile({ onLoaded: () => setDocumentSessionReady(true) })}
-              >
-                Import JSON file…
-              </button>
-              {welcomeBrowserCache ? (
-                <button type="button" className="btn welcome-doc-btn welcome-doc-btn--stack" onClick={continueFromBrowserCache}>
-                  <span className="welcome-doc-btn__label">Continue from browser copy</span>
-                  <span className="welcome-doc-btn__sub">
-                    Saved {formatBrowserCacheSavedLabel(welcomeBrowserCache.savedAtIso)}
-                  </span>
+      <div className="app-viewport">
+        {children}
+        {!documentSessionReady ? (
+          <div className="welcome-doc-overlay" role="presentation">
+            <div className="welcome-doc-backdrop" aria-hidden />
+            <div
+              className="welcome-doc-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="welcome-doc-title"
+              aria-describedby="welcome-doc-desc"
+            >
+              <h1 id="welcome-doc-title" className="welcome-doc-title">
+                Choose your data file
+              </h1>
+              <p id="welcome-doc-desc" className="welcome-doc-desc">
+                This app keeps everything in one JSON file. While you work, a copy is also kept in this browser (local storage) so you can pick up where you left off after a refresh. If a saved copy exists, it is loaded automatically; otherwise import a file from disk or start fresh.
+              </p>
+              <div className="welcome-doc-actions">
+                <button
+                  type="button"
+                  className="btn btn-primary welcome-doc-btn"
+                  ref={welcomePrimaryRef}
+                  onClick={() => openFile({ onLoaded: () => setDocumentSessionReady(true) })}
+                >
+                  Import JSON file…
                 </button>
-              ) : null}
-              <button type="button" className="btn welcome-doc-btn" onClick={beginEmptyDocumentSession}>
-                Start with an empty document
-              </button>
+                <button type="button" className="btn welcome-doc-btn" onClick={beginEmptyDocumentSession}>
+                  Start with an empty document
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </WealthFileContext.Provider>
   )
 }

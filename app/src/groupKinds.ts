@@ -17,6 +17,11 @@ export function labelForGroupKind(kind: string): string {
 /** Dispatch after portfolio or asset group create/update so the shell can refresh navigation. */
 export const PORTFOLIOS_UPDATED_EVENT = 'nonsheet-finance:portfolios-updated'
 
+/** Fired when the active wealth document was replaced from cache or a JSON import. */
+export const WEALTH_DOC_LOADED_EVENT = 'nonsheet-finance:wealth-doc-loaded'
+
+export type WealthDocLoadedSource = 'browser-cache' | 'import'
+
 /** @deprecated Use `PORTFOLIOS_UPDATED_EVENT` (same channel). */
 export const GROUPS_UPDATED_EVENT = PORTFOLIOS_UPDATED_EVENT
 
