@@ -1,6 +1,6 @@
 import type { FxRateRecord } from './document.js'
 
-/** FX rows in the wealth document are always quoted vs USD (`rate` = units of `currency` per 1 USD). */
+/** Legacy default "from" when old rows only stored a `currency` (To) leg. */
 export const FX_STORAGE_BASE_CURRENCY = 'USD' as const
 
 function normCurrency(c: string): string {
@@ -8,32 +8,49 @@ function normCurrency(c: string): string {
 }
 
 /**
- * Latest stored quote: units of `currency` per 1 USD, using rows with `date` on or before `onOrBeforeDate`
- * (inclusive). When `onOrBeforeDate` is omitted, uses the latest row by date for that currency.
+ * Latest observation per directed pair (from→to) on or before `onOrBeforeDate`, then bidirectional edges:
+ * forward mult = rate (1 from = rate × to), inverse mult = 1/rate.
  */
-export function latestUnitsOfCurrencyPerUsd(
+function buildAdjacency(
   fxRates: FxRateRecord[],
-  currency: string,
   onOrBeforeDate?: string,
-): number | null {
-  const c = normCurrency(currency)
-  if (c === FX_STORAGE_BASE_CURRENCY) return 1
+): Map<string, { to: string; mult: number }[]> {
   const cutoff = onOrBeforeDate ?? '9999-12-31'
-  let best: FxRateRecord | null = null
+  const bestForward = new Map<string, FxRateRecord>()
   for (const r of fxRates) {
-    if (normCurrency(r.currency) !== c) continue
     if (r.date > cutoff) continue
-    if (!best || r.date > best.date) best = r
+    const f = normCurrency(r.fromCurrency)
+    const t = normCurrency(r.toCurrency)
+    if (f === t) continue
+    if (typeof r.rate !== 'number' || Number.isNaN(r.rate) || r.rate <= 0) continue
+    const k = `${f}\t${t}`
+    const prev = bestForward.get(k)
+    if (!prev || r.date > prev.date) bestForward.set(k, r)
   }
-  if (!best || typeof best.rate !== 'number' || Number.isNaN(best.rate) || best.rate <= 0) return null
-  return best.rate
+
+  const adj = new Map<string, { to: string; mult: number }[]>()
+  const add = (from: string, to: string, mult: number) => {
+    if (!adj.has(from)) adj.set(from, [])
+    adj.get(from)!.push({ to, mult })
+  }
+
+  for (const r of bestForward.values()) {
+    const f = normCurrency(r.fromCurrency)
+    const t = normCurrency(r.toCurrency)
+    const rate = r.rate
+    add(f, t, rate)
+    add(t, f, 1 / rate)
+  }
+
+  return adj
 }
 
 /**
- * Convert a nominal amount from `fromCurrency` to `toCurrency` using USD as the pivot.
- * Missing FX for a non-USD leg falls back to returning the original `amount` (legacy / incomplete data).
+ * Convert `amount` in `fromCurrency` to `toCurrency` using explicit FX rows (BFS on the rate graph).
+ * Uses the latest row per directed (from,to) pair on or before `onOrBeforeDate`.
+ * If no path exists, returns `amount` unchanged (same as previous USD-pivot fallback).
  */
-export function convertAmountViaUsdFx(
+export function convertAmountViaFxRates(
   amount: number,
   fromCurrency: string,
   toCurrency: string,
@@ -43,12 +60,24 @@ export function convertAmountViaUsdFx(
   const f = normCurrency(fromCurrency)
   const t = normCurrency(toCurrency)
   if (f === t) return amount
-  const rF = latestUnitsOfCurrencyPerUsd(fxRates, f, onOrBeforeDate)
-  const rT = latestUnitsOfCurrencyPerUsd(fxRates, t, onOrBeforeDate)
-  const usd =
-    f === FX_STORAGE_BASE_CURRENCY ? amount : rF != null && rF > 0 ? amount / rF : null
-  if (usd === null) return amount
-  if (t === FX_STORAGE_BASE_CURRENCY) return usd
-  if (rT == null || rT <= 0) return amount
-  return usd * rT
+
+  const adj = buildAdjacency(fxRates, onOrBeforeDate)
+  const visited = new Set<string>()
+  const queue: { cur: string; amt: number }[] = [{ cur: f, amt: amount }]
+  visited.add(f)
+
+  while (queue.length > 0) {
+    const { cur, amt } = queue.shift()!
+    if (cur === t) return amt
+    for (const e of adj.get(cur) ?? []) {
+      if (visited.has(e.to)) continue
+      visited.add(e.to)
+      queue.push({ cur: e.to, amt: amt * e.mult })
+    }
+  }
+
+  return amount
 }
+
+/** @deprecated Use {@link convertAmountViaFxRates}; behavior is identical (USD is not special). */
+export const convertAmountViaUsdFx = convertAmountViaFxRates

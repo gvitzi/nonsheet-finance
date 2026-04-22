@@ -83,9 +83,11 @@ export default function Dashboard() {
     if (!data) return [] as { value: string; label: string }[]
     const book = (data.displayCurrency ?? 'EUR').trim().toUpperCase() || 'EUR'
     const def = (data.defaultDisplayCurrency ?? book).trim().toUpperCase() || book
-    const fromFx = fxRates
-      .map((r) => (typeof r.currency === 'string' ? r.currency.trim().toUpperCase() : ''))
-      .filter(Boolean)
+    const fromFx = fxRates.flatMap((r) => {
+      const a = typeof r.fromCurrency === 'string' ? r.fromCurrency.trim().toUpperCase() : ''
+      const b = typeof r.toCurrency === 'string' ? r.toCurrency.trim().toUpperCase() : ''
+      return [a, b].filter(Boolean)
+    })
     const fxSorted = [...new Set(fromFx)].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
 
     const opts: { value: string; label: string }[] = []

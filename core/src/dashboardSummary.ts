@@ -1,5 +1,5 @@
 import type { WealthDocument } from './document.js'
-import { convertAmountViaUsdFx } from './fxUsd.js'
+import { convertAmountViaFxRates } from './fxUsd.js'
 import {
   computeNetWorthByAssetGroupAtDates,
   computeNetWorthHistorySeries,
@@ -52,7 +52,7 @@ export type DashboardTimelineChartPayload = {
 }
 
 export type DashboardSummaryPayload = {
-  /** Amounts in the payload are aggregated in this currency (`settings.baseCurrency`). FX rows are USD-quoted. */
+  /** Amounts in the payload are aggregated in this currency (`settings.baseCurrency`). FX rows are explicit from→to pairs. */
   displayCurrency: string
   /** Default dashboard view currency from settings (`displayCurrency` or `baseCurrency`). */
   defaultDisplayCurrency: string
@@ -81,14 +81,14 @@ function latestByDate<T extends { date: string }>(rows: T[]): T | undefined {
   return [...rows].sort((a, b) => toDate(b.date).getTime() - toDate(a.date).getTime())[0]
 }
 
-/** Dashboard totals and breakdowns; amounts converted to `settings.baseCurrency` using USD-quoted `fxRates`. */
+/** Dashboard totals and breakdowns; amounts converted to `settings.baseCurrency` using explicit `fxRates` pairs. */
 export function computeDashboardSummary(doc: WealthDocument): DashboardSummaryPayload {
   const displayCurrency = doc.settings.baseCurrency ?? 'EUR'
   const defaultDisplayCurrency = (doc.settings.displayCurrency?.trim() || displayCurrency).toUpperCase()
   const fxRates = doc.fxRates
 
   const cvt = (amount: number, fromCurrency: string) =>
-    convertAmountViaUsdFx(amount, fromCurrency, displayCurrency, fxRates, undefined)
+    convertAmountViaFxRates(amount, fromCurrency, displayCurrency, fxRates, undefined)
 
   const assets = doc.assets
   const liabilities = doc.liabilities

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import './App.css'
 import { api } from './api'
@@ -21,6 +21,31 @@ import { TitlebarNotificationsBell } from './TitlebarNotificationsBell'
 import { usePwaInstall } from './usePwaInstall'
 
 const SIDEBAR_COLLAPSED_KEY = 'nonsheet-finance-sidebar-collapsed'
+
+const MOBILE_NAV_MQ = '(max-width: 767px)'
+
+function useMediaQuery(query: string): boolean {
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      const mq = window.matchMedia(query)
+      mq.addEventListener('change', onStoreChange)
+      return () => mq.removeEventListener('change', onStoreChange)
+    },
+    () => window.matchMedia(query).matches,
+    () => false,
+  )
+}
+
+function readInitialSidebarCollapsed(): boolean {
+  try {
+    const v = localStorage.getItem(SIDEBAR_COLLAPSED_KEY)
+    if (v === '1') return true
+    if (v === '0') return false
+  } catch {
+    /* ignore */
+  }
+  return typeof window !== 'undefined' && window.matchMedia(MOBILE_NAV_MQ).matches
+}
 
 const appVersionLabel = `v${__APP_VERSION__}`
 
@@ -280,13 +305,11 @@ function TitlebarCogMenu() {
 
 function App() {
   const location = useLocation()
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
-    } catch {
-      return false
-    }
-  })
+  const compactNav = useMediaQuery(MOBILE_NAV_MQ)
+  const pathKey = `${location.pathname}${location.search}`
+  const prevPathKeyRef = useRef<string | null>(null)
+  const hadCompactNavRef = useRef(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(readInitialSidebarCollapsed)
   const [sidebarPortfolios, setSidebarPortfolios] = useState<Portfolio[]>([])
   /** When true, sidebar shows New portfolio / New Asset Group. Off by default. */
   const [portfoliosEditMode, setPortfoliosEditMode] = useState(false)
@@ -302,6 +325,25 @@ function App() {
     }
     if (sidebarCollapsed) setPortfoliosEditMode(false)
   }, [sidebarCollapsed])
+
+  useEffect(() => {
+    if (compactNav && !hadCompactNavRef.current) {
+      setSidebarCollapsed(true)
+    }
+    hadCompactNavRef.current = compactNav
+  }, [compactNav])
+
+  useEffect(() => {
+    if (!compactNav) return
+    if (prevPathKeyRef.current === null) {
+      prevPathKeyRef.current = pathKey
+      return
+    }
+    if (pathKey !== prevPathKeyRef.current) {
+      prevPathKeyRef.current = pathKey
+      setSidebarCollapsed(true)
+    }
+  }, [compactNav, pathKey])
 
   useEffect(() => {
     const load = () => {
@@ -428,9 +470,17 @@ function App() {
       </header>
 
       <div className="app-main">
+        {compactNav && !sidebarCollapsed ? (
+          <button
+            type="button"
+            className="sidebar-backdrop"
+            aria-label="Close navigation menu"
+            onClick={() => setSidebarCollapsed(true)}
+          />
+        ) : null}
         <aside
           id="app-sidebar"
-          className={`sidebar${sidebarCollapsed ? ' sidebar--collapsed' : ''}`}
+          className={`sidebar${sidebarCollapsed ? ' sidebar--collapsed' : ''}${compactNav && !sidebarCollapsed ? ' sidebar--mobile-overlay' : ''}`}
           aria-label="Primary navigation"
         >
           <nav className="sidebar-nav">

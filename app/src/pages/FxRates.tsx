@@ -1,28 +1,31 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FxRateRecord } from '@nonsheet-finance/core'
-import { FX_STORAGE_BASE_CURRENCY } from '@nonsheet-finance/core'
 import { buildFxRatesAiPrompt } from '../components/aiImportPrompts'
 import ImportJsonModal from '../components/ImportJsonModal'
 import { ApiError, api } from '../api'
 import type { JsonImportMode } from '../api'
 
 /**
- * FX rows: `rate` = units of `currency` (the **To** side) per **1 From** (USD pivot in storage).
- * The UI labels each row as From → To so the quote is unambiguous.
+ * FX rows: explicit **fromCurrency → toCurrency** with **rate** = units of To per 1 From
+ * (`amountTo = amountFrom * rate`).
  */
 export default function FxRates() {
   const [rows, setRows] = useState<FxRateRecord[]>([])
   const [baseCurrency, setBaseCurrency] = useState('EUR')
   const [loading, setLoading] = useState(true)
-  const [form, setForm] = useState({ date: new Date().toISOString().slice(0, 10), currency: 'EUR', rate: '0.92' })
+  const [form, setForm] = useState({
+    date: new Date().toISOString().slice(0, 10),
+    fromCurrency: 'EUR',
+    toCurrency: 'USD',
+    rate: '1.08',
+  })
   const [error, setError] = useState<string | null>(null)
-  const [pastedJson, setPastedJson] = useState('')
   const [importMessage, setImportMessage] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
   const [importJsonOpen, setImportJsonOpen] = useState(false)
   const [importMode, setImportMode] = useState<JsonImportMode>('add')
-
-  const fromLabel = FX_STORAGE_BASE_CURRENCY
+  const [pastedJson, setPastedJson] = useState('')
+  const seededFromBase = useRef(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -30,7 +33,7 @@ export default function FxRates() {
     try {
       const [fx, settings] = await Promise.all([api.fxRates.list(), api.settings.get()])
       setRows(fx as FxRateRecord[])
-      setBaseCurrency(settings.baseCurrency)
+      setBaseCurrency(settings.baseCurrency.trim().toUpperCase() || 'EUR')
     } catch {
       setError('Could not load FX rates.')
       setRows([])
@@ -43,23 +46,30 @@ export default function FxRates() {
     void load()
   }, [load])
 
+  useEffect(() => {
+    if (loading || seededFromBase.current) return
+    seededFromBase.current = true
+    setForm((f) => ({ ...f, fromCurrency: baseCurrency }))
+  }, [loading, baseCurrency])
+
   const sorted = useMemo(() => [...rows].sort((a, b) => b.date.localeCompare(a.date)), [rows])
 
   const addRow = async () => {
     setError(null)
     setImportMessage(null)
     const rate = Number(form.rate)
-    const cur = form.currency.trim().toUpperCase()
-    if (!form.currency.trim() || Number.isNaN(rate) || rate <= 0) {
-      setError('Enter a valid “To” currency code and a positive rate.')
+    const fromC = form.fromCurrency.trim().toUpperCase()
+    const toC = form.toCurrency.trim().toUpperCase()
+    if (!fromC || !toC || Number.isNaN(rate) || rate <= 0) {
+      setError('Enter valid From and To currency codes and a positive rate.')
       return
     }
-    if (cur === fromLabel) {
-      setError(`${fromLabel} is the stored “From” pivot. Add rows for other currencies (the “To” side), as units of that currency per 1 USD.`)
+    if (fromC === toC) {
+      setError('From and To must be different currencies.')
       return
     }
     try {
-      await api.fxRates.create({ date: form.date, currency: cur, rate })
+      await api.fxRates.create({ date: form.date, fromCurrency: fromC, toCurrency: toC, rate })
       setForm((f) => ({ ...f, rate: '1' }))
       await load()
     } catch (e) {
@@ -110,9 +120,9 @@ export default function FxRates() {
         <div>
           <h1>FX rates</h1>
           <p className="page-subtitle">
-            Each row is an explicit <strong>{fromLabel} → currency</strong> quote: <strong>1 {fromLabel} = rate × To</strong>{' '}
-            (stored as units of <strong>To</strong> per 1 {fromLabel}). Totals are aggregated in your base currency (
-            <strong>{baseCurrency}</strong>); these rows drive conversion via the USD pivot.
+            Each row is an explicit <strong>From → To</strong> quote: <strong>1 From = rate × To</strong> (stored as{' '}
+            <strong>fromCurrency</strong>, <strong>toCurrency</strong>, <strong>rate</strong>). Dashboard totals use your
+            base currency (<strong>{baseCurrency}</strong>); conversion walks these pairs (including inverse hops).
           </p>
         </div>
       </div>
@@ -130,23 +140,29 @@ export default function FxRates() {
           <label>
             From → To
             <div className="fx-add-rate-form__pair">
-              <span className="settings-readonly-value fx-add-rate-form__from" title="Storage pivot">
-                {fromLabel}
-              </span>
+              <input
+                maxLength={8}
+                value={form.fromCurrency}
+                onChange={(e) => setForm((f) => ({ ...f, fromCurrency: e.target.value.toUpperCase() }))}
+                title="From currency (ISO code)"
+                placeholder="EUR"
+                aria-label="From currency"
+              />
               <span className="fx-add-rate-form__arrow" aria-hidden>
                 →
               </span>
               <input
                 maxLength={8}
-                value={form.currency}
-                onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value.toUpperCase() }))}
-                title="Target currency (ISO code)"
-                placeholder="EUR"
+                value={form.toCurrency}
+                onChange={(e) => setForm((f) => ({ ...f, toCurrency: e.target.value.toUpperCase() }))}
+                title="To currency (ISO code)"
+                placeholder="USD"
+                aria-label="To currency"
               />
             </div>
           </label>
           <label>
-            Rate (1 {fromLabel} = … To)
+            Rate (1 From = … To)
             <input inputMode="decimal" value={form.rate} onChange={(e) => setForm((f) => ({ ...f, rate: e.target.value }))} />
           </label>
           <div className="form-actions fx-add-rate-form__actions">
@@ -184,7 +200,8 @@ export default function FxRates() {
         <h2>Saved rates</h2>
         {sorted.length === 0 ? (
           <p className="page-subtitle">
-            No FX rows yet. Dashboard and group charts assume raw numbers match the aggregation currency until you add quotes.
+            No FX rows yet. Dashboard and group charts assume raw numbers match the aggregation currency until you add
+            quotes.
           </p>
         ) : (
           <table className="data-table">
@@ -201,12 +218,12 @@ export default function FxRates() {
                 <tr key={r.id}>
                   <td>{r.date}</td>
                   <td>
-                    <strong>{fromLabel}</strong>
+                    <strong>{r.fromCurrency}</strong>
                     <span aria-hidden> → </span>
-                    <strong>{r.currency}</strong>
+                    <strong>{r.toCurrency}</strong>
                   </td>
                   <td>
-                    1 {fromLabel} = {r.rate} {r.currency}
+                    1 {r.fromCurrency} = {r.rate} {r.toCurrency}
                   </td>
                   <td>
                     <button type="button" className="btn btn-sm" onClick={() => void remove(r.id)}>

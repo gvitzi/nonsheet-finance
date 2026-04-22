@@ -1,9 +1,10 @@
 /**
  * Single-file JSON persistence for the static Nonsheet Finance app.
  *
- * FX convention (`fxRates[].rate`): units of `currency` per **1 USD** (storage is always USD-quoted).
+ * FX rows (`fxRates[]`) store explicit **fromCurrency → toCurrency** with **rate** = units of `toCurrency`
+ * per **1** `fromCurrency` (so `amountTo = amountFrom * rate`). Legacy documents used `{ currency, rate }`
+ * meaning **USD → currency** with the same numeric `rate`; those are normalized on parse.
  * `settings.baseCurrency` is the aggregation / book currency. Optional `settings.displayCurrency` defaults the Dashboard view.
- * Example: USD row for EUR with rate 0.93 means 1 USD = 0.93 EUR.
  */
 
 import type { GroupKind } from './index.js'
@@ -15,11 +16,12 @@ export type WealthDocumentMeta = {
   title?: string
 }
 
-/** One FX observation (manual). `rate` = units of `currency` per 1 USD (see module comment). */
+/** One FX quote: `rate` = units of `toCurrency` per 1 `fromCurrency` at `date`. */
 export type FxRateRecord = {
   id: string
   date: string
-  currency: string
+  fromCurrency: string
+  toCurrency: string
   rate: number
   createdAt: string
   updatedAt: string
@@ -451,13 +453,39 @@ function parseSecurityValuation(o: unknown): SecurityValuationRecord {
   }
 }
 
+/** Legacy single-leg rows used `currency` = To with implied From = USD. */
+const FX_LEGACY_PIVOT = 'USD'
+
+function parseFxPairFields(o: Record<string, unknown>): { from: string; to: string; rate: number } {
+  const rate = reqNum(o, 'rate')
+  if (rate <= 0) throw new WealthDocumentParseError('fxRate.rate must be positive')
+  const fromRaw = typeof o.fromCurrency === 'string' ? o.fromCurrency.trim().toUpperCase() : ''
+  const toRaw = typeof o.toCurrency === 'string' ? o.toCurrency.trim().toUpperCase() : ''
+  const leg = typeof o.currency === 'string' ? o.currency.trim().toUpperCase() : ''
+  if (fromRaw && toRaw) {
+    if (fromRaw === toRaw) throw new WealthDocumentParseError('fxRate fromCurrency and toCurrency must differ')
+    return { from: fromRaw, to: toRaw, rate }
+  }
+  if (leg) {
+    if (leg === FX_LEGACY_PIVOT) {
+      throw new WealthDocumentParseError(
+        'Legacy fxRate used "currency" as the To leg with From = USD; currency cannot be USD. Use fromCurrency and toCurrency for USD-inclusive quotes.',
+      )
+    }
+    return { from: FX_LEGACY_PIVOT, to: leg, rate }
+  }
+  throw new WealthDocumentParseError('fxRate requires fromCurrency+toCurrency, or legacy "currency" (To) with From = USD')
+}
+
 function parseFxRate(o: unknown): FxRateRecord {
   if (!isObj(o)) throw new WealthDocumentParseError('fxRate item')
+  const { from, to, rate } = parseFxPairFields(o)
   return {
     id: reqStr(o, 'id'),
-    date: reqStr(o, 'date'),
-    currency: reqStr(o, 'currency').trim().toUpperCase(),
-    rate: reqNum(o, 'rate'),
+    date: reqStr(o, 'date').slice(0, 10),
+    fromCurrency: from,
+    toCurrency: to,
+    rate,
     createdAt: reqStr(o, 'createdAt'),
     updatedAt: reqStr(o, 'updatedAt'),
   }
@@ -521,6 +549,39 @@ function randomId(): string {
   return `id-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
 }
 
+/**
+ * Lenient coercion for merge/import (skips invalid rows). Legacy `{ currency, rate }` → USD→currency.
+ */
+export function tryCoerceFxRateImportRow(
+  item: unknown,
+  timestamps: { createdAt: string; updatedAt: string },
+): FxRateRecord | null {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return null
+  const o = item as Record<string, unknown>
+  const date = typeof o.date === 'string' ? o.date.slice(0, 10) : ''
+  const rateRaw = o.rate
+  const rateNum = typeof rateRaw === 'number' ? rateRaw : Number(rateRaw)
+  if (!date || Number.isNaN(rateNum) || rateNum <= 0) return null
+  let pair: { from: string; to: string; rate: number }
+  try {
+    pair = parseFxPairFields({ ...o, date, rate: rateNum })
+  } catch {
+    return null
+  }
+  const id = typeof o.id === 'string' && o.id.trim() ? o.id.trim() : randomId()
+  const createdAt = typeof o.createdAt === 'string' && o.createdAt.trim() ? o.createdAt : timestamps.createdAt
+  const updatedAt = typeof o.updatedAt === 'string' && o.updatedAt.trim() ? o.updatedAt : timestamps.updatedAt
+  return {
+    id,
+    date,
+    fromCurrency: pair.from,
+    toCurrency: pair.to,
+    rate: pair.rate,
+    createdAt,
+    updatedAt,
+  }
+}
+
 /** Parse `fxRates` from a raw JSON array or `{ "fxRates": [...] }` (for imports / merge). */
 export function parseFxRatesJsonInput(json: unknown): FxRateRecord[] {
   if (Array.isArray(json)) return parseArr(json, 'fxRates', parseFxRate)
@@ -528,55 +589,55 @@ export function parseFxRatesJsonInput(json: unknown): FxRateRecord[] {
   throw new WealthDocumentParseError('Expected an array of FX rate objects or { "fxRates": [...] }')
 }
 
-const FX_STORAGE_BASE = 'USD'
-
 /**
- * Merge imported FX rows into `existing`. Matches by `id`, else by (`date`, `currency`).
- * Skips rows for `USD` (implicit pivot). Normalizes dates to `YYYY-MM-DD` and currency to uppercase.
+ * Merge imported FX rows into `existing`. Matches by `id`, else by (`date`, `fromCurrency`, `toCurrency`).
+ * Normalizes dates to `YYYY-MM-DD` and currency codes to uppercase.
  */
 export function mergeFxRateRecords(existing: FxRateRecord[], incoming: FxRateRecord[]): FxRateRecord[] {
   const { updatedAt: now } = newEntityTimestamps()
   const norm = (c: string) => c.trim().toUpperCase()
   const out: FxRateRecord[] = existing.map((r) => ({ ...r }))
   const idToIdx = new Map<string, number>()
-  const dateCurToIdx = new Map<string, number>()
+  const tripleToIdx = new Map<string, number>()
   const reindex = () => {
     idToIdx.clear()
-    dateCurToIdx.clear()
+    tripleToIdx.clear()
     out.forEach((r, i) => {
       idToIdx.set(r.id, i)
-      dateCurToIdx.set(`${r.date.slice(0, 10)}\t${norm(r.currency)}`, i)
+      tripleToIdx.set(`${r.date.slice(0, 10)}\t${norm(r.fromCurrency)}\t${norm(r.toCurrency)}`, i)
     })
   }
   reindex()
 
   for (const raw of incoming) {
-    const currency = norm(raw.currency)
-    if (currency === FX_STORAGE_BASE) continue
+    const fromC = norm(raw.fromCurrency)
+    const toC = norm(raw.toCurrency)
+    if (!fromC || !toC || fromC === toC) continue
     const date = typeof raw.date === 'string' ? raw.date.slice(0, 10) : ''
     const rate = raw.rate
-    if (!date || !currency || typeof rate !== 'number' || Number.isNaN(rate) || rate <= 0) continue
+    if (!date || typeof rate !== 'number' || Number.isNaN(rate) || rate <= 0) continue
 
     let idx: number | undefined
     if (raw.id && idToIdx.has(raw.id)) idx = idToIdx.get(raw.id)
-    else idx = dateCurToIdx.get(`${date}\t${currency}`)
+    else idx = tripleToIdx.get(`${date}\t${fromC}\t${toC}`)
 
     const updatedAt = typeof raw.updatedAt === 'string' ? raw.updatedAt : now
 
     if (idx !== undefined) {
       const prev = out[idx]
-      const oldKey = `${prev.date.slice(0, 10)}\t${norm(prev.currency)}`
-      dateCurToIdx.delete(oldKey)
+      const oldKey = `${prev.date.slice(0, 10)}\t${norm(prev.fromCurrency)}\t${norm(prev.toCurrency)}`
+      tripleToIdx.delete(oldKey)
       out[idx] = {
         ...prev,
         id: prev.id,
         date,
-        currency,
+        fromCurrency: fromC,
+        toCurrency: toC,
         rate,
         updatedAt,
         createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : prev.createdAt,
       }
-      dateCurToIdx.set(`${date}\t${currency}`, idx)
+      tripleToIdx.set(`${date}\t${fromC}\t${toC}`, idx)
       continue
     }
 
@@ -585,13 +646,14 @@ export function mergeFxRateRecords(existing: FxRateRecord[], incoming: FxRateRec
     const row: FxRateRecord = {
       id,
       date,
-      currency,
+      fromCurrency: fromC,
+      toCurrency: toC,
       rate,
       createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : fresh.createdAt,
       updatedAt,
     }
     idToIdx.set(id, out.length)
-    dateCurToIdx.set(`${date}\t${currency}`, out.length)
+    tripleToIdx.set(`${date}\t${fromC}\t${toC}`, out.length)
     out.push(row)
   }
   return out

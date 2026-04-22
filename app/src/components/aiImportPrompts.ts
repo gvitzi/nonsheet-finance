@@ -1,24 +1,31 @@
 import { FX_STORAGE_BASE_CURRENCY } from '@nonsheet-finance/core'
 
-const pivot = FX_STORAGE_BASE_CURRENCY
+const hub = FX_STORAGE_BASE_CURRENCY
 
-/** FX rows: `{ date, currency, rate }` with `rate` = units of `currency` per 1 USD. */
+/** FX rows: `{ date, fromCurrency, toCurrency, rate }` — **rate** = units of **toCurrency** per **1** **fromCurrency**. */
 export function buildFxRatesAiPrompt(baseCurrency: string): string {
   const base = (baseCurrency || 'EUR').trim().toUpperCase() || 'EUR'
+  const baseToHub =
+    base === hub
+      ? ''
+      : `- One series **${base}**→**${hub}** (book currency to hub) so amounts in **${base}** connect to other crosses.\n`
+
   return `You are producing data for a personal finance app.
 
 Output: a single JSON array only (no markdown, no explanation). Each element must be an object with exactly these keys:
 - "date": string, calendar date in YYYY-MM-DD (use the last day of each calendar quarter).
-- "currency": string, 3-letter ISO 4217 code for the **To** currency (the non-USD side in each quote).
-- "rate": number, strictly positive: how many units of **currency** equal **one US dollar (1 ${pivot})** (same convention as "units of foreign currency per 1 USD").
+- "fromCurrency": string, 3-letter ISO 4217 — **From** leg of the quote.
+- "toCurrency": string, 3-letter ISO 4217 — **To** leg (must differ from **fromCurrency**).
+- "rate": number, strictly positive: units of **toCurrency** per **1** **fromCurrency** (so amount in To = amount in From × rate).
 
 Context:
-- The app always stores the **From** side of every stored row as **${pivot}** (the pivot). The **currency** field is always the **To** side.
-- The user's **base / book currency** (where they aggregate balances) is **${base}**. When you choose rates, they should be economically sensible for converting positions into ${base} via ${pivot} using standard triangular logic.
+- The user's **base / book currency** is **${base}**. Treat **${base}** as the primary **From** currency when reasoning about which crosses matter for their balances.
+- Each row is self-contained: no implicit pivot. You may still use **${hub}** as a convenient hub currency in the data you emit.
 
-Required **To** currencies to include in the file (one series each, same quarter dates): **EUR**, **ILS**, and **USD**. For **USD** as To vs ${pivot}, use rate **1.0** on every date.
+Required rows (one time series each, same quarter-end dates):
+${baseToHub}- **${hub}**→**EUR**, **${hub}**→**ILS**, and **${hub}**→**GBP**
 
-Date coverage: for each of those currencies, emit one row per **calendar quarter** from **2020-Q1** through the **current quarter** (inclusive), using the **quarter-end** date (e.g. 2020-03-31, 2020-06-30, …).
+Date coverage: for each required series above, emit one row per **calendar quarter** from **2020-Q1** through the **current quarter** (inclusive), using the **quarter-end** date (e.g. 2020-03-31, 2020-06-30, …).
 
 Use realistic historical FX levels where you can; if uncertain, approximate clearly and stay internally consistent.`
 }

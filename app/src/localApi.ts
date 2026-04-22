@@ -6,6 +6,7 @@ import {
   mergeSecurityInfoRecords,
   newEntityTimestamps,
   securityValuationIdForAsset,
+  tryCoerceFxRateImportRow,
   type FxRateRecord,
   type GroupHistoryItem,
   type SecurityValuationRecord,
@@ -1374,16 +1375,18 @@ export const api = {
   /** FX rates stored in the document (see Settings / FX page). */
   fxRates: {
     list: () => Promise.resolve([...getWealthDocument().fxRates].sort((a, b) => b.date.localeCompare(a.date))),
-    create: (data: { date: string; currency: string; rate: number }) => {
-      const cur = data.currency.trim().toUpperCase()
-      if (cur === 'USD') {
-        return rej(400, 'USD is the implicit pivot. Store other currencies as units per 1 USD (see FX page).')
+    create: (data: { date: string; fromCurrency: string; toCurrency: string; rate: number }) => {
+      const fromC = data.fromCurrency.trim().toUpperCase()
+      const toC = data.toCurrency.trim().toUpperCase()
+      if (!fromC || !toC || fromC === toC) {
+        return rej(400, 'From and to currency must differ.')
       }
       const { createdAt, updatedAt } = newEntityTimestamps()
       const row = {
         id: randomId(),
         date: data.date.slice(0, 10),
-        currency: cur,
+        fromCurrency: fromC,
+        toCurrency: toC,
         rate: data.rate,
         createdAt,
         updatedAt,
@@ -1391,10 +1394,12 @@ export const api = {
       updateWealthDocument((d) => ({ ...d, fxRates: [...d.fxRates, row] }))
       return Promise.resolve(row)
     },
-    update: (id: string, data: Partial<{ date: string; currency: string; rate: number }>) => {
-      if (data.currency !== undefined && data.currency.trim().toUpperCase() === 'USD') {
-        return rej(400, 'USD is the implicit pivot; do not store a USD FX row.')
-      }
+    update: (id: string, data: Partial<{ date: string; fromCurrency: string; toCurrency: string; rate: number }>) => {
+      const cur = getWealthDocument().fxRates.find((x) => x.id === id)
+      if (!cur) return rej(404, 'Not found')
+      const nextFrom = data.fromCurrency !== undefined ? data.fromCurrency.trim().toUpperCase() : cur.fromCurrency
+      const nextTo = data.toCurrency !== undefined ? data.toCurrency.trim().toUpperCase() : cur.toCurrency
+      if (nextFrom === nextTo) return rej(400, 'From and to currency must differ.')
       const t = nowIso()
       updateWealthDocument((d) => ({
         ...d,
@@ -1403,22 +1408,22 @@ export const api = {
             ? {
                 ...r,
                 ...(data.date !== undefined ? { date: data.date.slice(0, 10) } : {}),
-                ...(data.currency !== undefined ? { currency: data.currency.trim().toUpperCase() } : {}),
+                ...(data.fromCurrency !== undefined ? { fromCurrency: data.fromCurrency.trim().toUpperCase() } : {}),
+                ...(data.toCurrency !== undefined ? { toCurrency: data.toCurrency.trim().toUpperCase() } : {}),
                 ...(data.rate !== undefined ? { rate: data.rate } : {}),
                 updatedAt: t,
               }
             : r,
         ),
       }))
-      const r = getWealthDocument().fxRates.find((x) => x.id === id)
-      if (!r) return rej(404, 'Not found')
+      const r = getWealthDocument().fxRates.find((x) => x.id === id)!
       return Promise.resolve(r)
     },
     delete: (id: string) => {
       updateWealthDocument((d) => ({ ...d, fxRates: d.fxRates.filter((r) => r.id !== id) }))
       return Promise.resolve()
     },
-    /** Import JSON array or `{ "fxRates": [...] }`. `mode`: replace all FX rows, or add/update by id or (date, currency). */
+    /** Import JSON array or `{ "fxRates": [...] }`. `mode`: replace all FX rows, or add/update by id or (date, from, to). */
     importJson: (text: string, mode: JsonImportMode): Promise<{ importedRowCount: number; totalRows: number }> => {
       let parsed: unknown
       try {
@@ -1437,17 +1442,8 @@ export const api = {
       const ts = newEntityTimestamps()
       const coerced: FxRateRecord[] = []
       for (const item of arr) {
-        if (!item || typeof item !== 'object') continue
-        const o = item as Record<string, unknown>
-        const date = typeof o.date === 'string' ? o.date.slice(0, 10) : ''
-        const currency = typeof o.currency === 'string' ? o.currency.trim().toUpperCase() : ''
-        const rateRaw = o.rate
-        const rate = typeof rateRaw === 'number' ? rateRaw : Number(rateRaw)
-        if (!date || !currency || currency === 'USD' || Number.isNaN(rate) || rate <= 0) continue
-        const id = typeof o.id === 'string' && o.id.trim() ? o.id.trim() : randomId()
-        const createdAt = typeof o.createdAt === 'string' ? o.createdAt : ts.createdAt
-        const updatedAt = typeof o.updatedAt === 'string' ? o.updatedAt : ts.updatedAt
-        coerced.push({ id, date, currency, rate, createdAt, updatedAt })
+        const row = tryCoerceFxRateImportRow(item, ts)
+        if (row) coerced.push(row)
       }
       if (coerced.length === 0 && mode === 'add') {
         return rej(400, 'No valid FX rows to import.')

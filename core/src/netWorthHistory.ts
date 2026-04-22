@@ -1,10 +1,10 @@
 /**
  * Builds a dated net-worth series from valuations and ledgers (no manual net-worth rows).
- * Amounts are converted to `displayCurrency` using `fxRates` (USD-quoted; see `fxUsd.ts`).
+ * Amounts are converted to `displayCurrency` using explicit `fxRates` from→to pairs (see `fxUsd.ts`).
  */
 
 import type { FxRateRecord } from './document.js'
-import { convertAmountViaUsdFx } from './fxUsd.js'
+import { convertAmountViaFxRates } from './fxUsd.js'
 
 const SEC = 'securities'
 const KIND_PURCHASE = 'purchase'
@@ -166,7 +166,7 @@ export function computeGroupHistory(
 
   const conv = (amount: number, from: string, dateKey: string) =>
     fx
-      ? convertAmountViaUsdFx(amount, from, fx.displayCurrency, fx.fxRates, dateKey)
+      ? convertAmountViaFxRates(amount, from, fx.displayCurrency, fx.fxRates, dateKey)
       : amount
 
   for (const asset of input.generalAssets ?? []) {
@@ -261,7 +261,7 @@ export function computeNetWorthHistorySeries(input: {
   for (const asOf of dates) {
     const dk = toDateKey(asOf)
     const cvt = (amount: number, from: string) =>
-      convertAmountViaUsdFx(amount, from, displayCurrency, fxRates, dk)
+      convertAmountViaFxRates(amount, from, displayCurrency, fxRates, dk)
 
     let propertyAssets = 0
     let propertyMortgages = 0
@@ -345,7 +345,7 @@ export function computeNetWorthByAssetGroupAtDates(input: {
   for (const asOf of dates) {
     const dk = toDateKey(asOf)
     const cvt = (amount: number, from: string) =>
-      convertAmountViaUsdFx(amount, from, displayCurrency, fxRates, dk)
+      convertAmountViaFxRates(amount, from, displayCurrency, fxRates, dk)
 
     const sums: Record<string, number> = {}
     for (const id of assetGroupIds) sums[id] = 0
