@@ -1,0 +1,68 @@
+/** Pie / line charts and legends: prefer reference issuer name, then ticker, then a non-ISIN holding name, then ISIN. */
+export function chartLabelForSecurityHolding(src: {
+  name: string
+  isin?: string | null
+  ticker?: string | null
+  securityName?: string | null
+}): string {
+  const sn = src.securityName?.trim()
+  if (sn) return sn
+  const tk = src.ticker?.trim()
+  if (tk) return tk
+  const n = src.name?.trim() ?? ''
+  const isinKey = src.isin?.trim().toUpperCase() ?? ''
+  if (n && (!isinKey || n.toUpperCase() !== isinKey)) return n
+  return isinKey || n || '—'
+}
+
+/** Ticker column: reference ticker, else holding name unless it duplicates the ISIN (or looks ISIN-only). */
+export function displayTickerInTable(src: {
+  name: string
+  isin?: string | null
+  ticker?: string | null
+}): string {
+  const ref = src.ticker?.trim()
+  if (ref) return ref
+  const n = src.name?.trim() ?? ''
+  if (!n) return '—'
+  const isinKey = src.isin?.trim().toUpperCase() ?? ''
+  if (isinKey && n.toUpperCase() === isinKey) return '—'
+  if (/^[A-Z]{2}[A-Z0-9]{9}[0-9]$/i.test(n)) return '—'
+  if (/^CRYPTO-[A-Z0-9-]+$/i.test(n)) return '—'
+  return n
+}
+
+/** Mark id format from API: `ISIN::YYYY-MM-DD` */
+export function decodeIsinFromValuationId(id: string): string | null {
+  const sep = '::'
+  const i = id.indexOf(sep)
+  if (i <= 0) return null
+  const raw = id.slice(0, i).trim().toUpperCase()
+  return raw || null
+}
+
+/** Stock valuations table: ticker / name lines when asset exists; else ISIN from row or mark id. */
+export function stockValuationSecurityCell(v: {
+  id: string
+  isin?: string
+  asset?: {
+    name: string
+    isin?: string | null
+    ticker?: string | null
+    securityName?: string | null
+  }
+}): { title: string; subtitle: string | null } {
+  const isinFallback = v.isin?.trim() || decodeIsinFromValuationId(v.id) || ''
+  if (!v.asset) {
+    return { title: isinFallback || '—', subtitle: null }
+  }
+  const short = displayTickerInTable(v.asset)
+  const full = v.asset.securityName?.trim()
+  const rawName = v.asset.name?.trim()
+  if (short !== '—') {
+    return { title: short, subtitle: full && full !== short ? full : null }
+  }
+  if (full) return { title: full, subtitle: null }
+  if (rawName) return { title: rawName, subtitle: null }
+  return { title: isinFallback || '—', subtitle: null }
+}

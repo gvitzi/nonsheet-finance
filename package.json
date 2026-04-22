@@ -1,0 +1,14 @@
+{
+  "name": "nonsheet-finance",
+  "private": true,
+  "version": "0.8.0",
+  "description": "Nonsheet Finance — local-first static SPA + single JSON document",
+  "scripts": {
+    "build": "npm run build:all",
+    "dev": "cd app && npm run dev",
+    "lint": "cd app && npm run lint",
+    "preview": "cd app && npm run preview",
+    "build:all": "cd core && npm install --no-audit --no-fund && npm run build && cd ../app && npm install --no-audit --no-fund && npm run build"
+  },
+  "devDependencies": {}
+}

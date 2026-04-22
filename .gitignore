@@ -1,0 +1,44 @@
+# Cursor / local agent
+.claude/
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+static-app/
+coverage/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Local data and databases
+.data/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Prisma local artifacts
+prisma/*.db
+prisma/*.db-journal
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Private local agent notes
+agent/.task-usage-private.md
+agent/*.local.md
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
