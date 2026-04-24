@@ -272,6 +272,32 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
     }
   }
 
+  const archiveProperty = async () => {
+    if (
+      !confirm(
+        'Archive this property? It will be hidden from default lists and totals until you show archived on the group page or unarchive it here.',
+      )
+    )
+      return
+    try {
+      await api.properties.archive(propertyId)
+      setBanner({ type: 'ok', text: 'Property archived.' })
+      await load()
+    } catch (e: unknown) {
+      setBanner({ type: 'err', text: err(e, 'Failed to archive property.') })
+    }
+  }
+
+  const unarchiveProperty = async () => {
+    try {
+      await api.properties.unarchive(propertyId)
+      setBanner({ type: 'ok', text: 'Property restored.' })
+      await load()
+    } catch (e: unknown) {
+      setBanner({ type: 'err', text: err(e, 'Failed to unarchive property.') })
+    }
+  }
+
   const vValidation = useMemo(() => {
     if (!vForm.date) return 'Date is required.'
     if (Number.isNaN(Number(vForm.value))) return 'Value must be a number.'
@@ -470,10 +496,19 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
 
       <div className="page-header">
         <h1>{property.name}</h1>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div className="page-header__actions">
           <Link className="btn" to={assetGroupHubPath(portfolioId, assetGroupId)}>
             All properties
           </Link>
+          {property.archivedAt ? (
+            <button className="btn btn-sm" type="button" onClick={unarchiveProperty}>
+              Unarchive
+            </button>
+          ) : (
+            <button className="btn btn-sm" type="button" onClick={archiveProperty}>
+              Archive
+            </button>
+          )}
           <button className="btn btn-danger" type="button" onClick={delProperty}>
             Delete property
           </button>
