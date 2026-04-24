@@ -89,6 +89,40 @@ function normalizeTenantNames(names: string[] | undefined): string[] {
   return names.map((s) => String(s).trim()).filter((s) => s.length > 0)
 }
 
+/** Local-calendar YYYY-MM-DD arithmetic (matches `new Date(ymd + 'T12:00:00')` in this module). */
+function addCalendarDaysToYmd(ymd: string, deltaDays: number): string {
+  const y = Number(ymd.slice(0, 4))
+  const month = Number(ymd.slice(5, 7))
+  const day = Number(ymd.slice(8, 10))
+  const d = new Date(y, month - 1, day + deltaDays)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+/**
+ * Open-ended periods use an unbounded end in overlap checks, so a second "open" period would always fail.
+ * Before adding or moving a period to `newStartYmd`, end any still-open period on this property that
+ * starts strictly earlier, at the calendar day before `newStartYmd`.
+ */
+function withOpenRentPeriodsClosedBeforeStart(
+  periods: PropertyRentPeriodRecord[],
+  propertyId: string,
+  newStartYmd: string,
+  updatedAt: string,
+): PropertyRentPeriodRecord[] {
+  if (newStartYmd.length < 10) return periods
+  const prevEndYmd = addCalendarDaysToYmd(newStartYmd, -1)
+  return periods.map((r) => {
+    if (r.propertyId !== propertyId) return r
+    const open = r.endDate == null || r.endDate === ''
+    if (!open) return r
+    const rs = rentPeriodDateYmd(r.startDate)
+    if (rs.length < 10 || rs >= newStartYmd) return r
+    if (prevEndYmd < rs) return r
+    return { ...r, endDate: new Date(prevEndYmd + 'T12:00:00').toISOString(), updatedAt }
+  })
+}
+
 function assertRentPeriodNoOverlap(doc: WealthDocument, candidate: PropertyRentPeriodRecord, ignoreId?: string): void {
   const hits = findOverlappingRentPeriods(doc.propertyRentPeriods, candidate, ignoreId)
   if (hits.length > 0) throw new ApiError('This rent period overlaps an existing one for this property.', 400)
@@ -507,8 +541,13 @@ export const api = {
         createdAt,
         updatedAt,
       }
-      assertRentPeriodNoOverlap(d0, row)
-      updateWealthDocument((d) => ({ ...d, propertyRentPeriods: [...d.propertyRentPeriods, row] }))
+      const touch = nowIso()
+      const periodsAdjusted = withOpenRentPeriodsClosedBeforeStart(d0.propertyRentPeriods, propertyId, startYmd, touch)
+      assertRentPeriodNoOverlap({ ...d0, propertyRentPeriods: periodsAdjusted }, row)
+      updateWealthDocument((d) => ({
+        ...d,
+        propertyRentPeriods: [...withOpenRentPeriodsClosedBeforeStart(d.propertyRentPeriods, propertyId, startYmd, touch), row],
+      }))
       notifyPortfolios()
       const prop = d0.properties.find((p) => p.id === propertyId)
       return Promise.resolve({ ...row, property: prop ? { id: prop.id, name: prop.name } : undefined } as PropertyRentPeriod)
@@ -554,11 +593,14 @@ export const api = {
         notes: data.notes !== undefined ? (data.notes?.trim() ? data.notes.trim() : null) : prev.notes,
         updatedAt: t,
       }
-      assertRentPeriodNoOverlap(d0, candidate, periodId)
-      updateWealthDocument((d) => ({
-        ...d,
-        propertyRentPeriods: d.propertyRentPeriods.map((r) => (r.id === periodId && r.propertyId === propertyId ? candidate : r)),
-      }))
+      const base = d0.propertyRentPeriods.filter((r) => !(r.id === periodId && r.propertyId === propertyId))
+      const periodsAdjusted = withOpenRentPeriodsClosedBeforeStart(base, propertyId, startYmd, t)
+      assertRentPeriodNoOverlap({ ...d0, propertyRentPeriods: periodsAdjusted }, candidate, periodId)
+      updateWealthDocument((d) => {
+        const base0 = d.propertyRentPeriods.filter((r) => !(r.id === periodId && r.propertyId === propertyId))
+        const adj = withOpenRentPeriodsClosedBeforeStart(base0, propertyId, startYmd, t)
+        return { ...d, propertyRentPeriods: [...adj, candidate] }
+      })
       notifyPortfolios()
       const d = getWealthDocument()
       const out = d.propertyRentPeriods.find((x) => x.id === periodId)

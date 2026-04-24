@@ -1044,8 +1044,9 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
           </summary>
           <div className="property-accordion__body stack">
             <p className="page-subtitle">
-              Contract windows: base rent, Hausgeld, tenants, and optional end date. Open end = leave end date empty. The period
-              that contains today drives the rent and Hausgeld shown in Details above.
+              Contract windows: base rent, Hausgeld, tenants, and optional end date. Open end = leave end date empty. If you add
+              a period that starts after an existing open-ended one, the earlier period is ended the day before the new start so
+              ranges stay sequential. The period that contains today drives the rent and Hausgeld shown in Details above.
             </p>
 
             <div className="form-panel">
