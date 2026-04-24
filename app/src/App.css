@@ -1633,6 +1633,60 @@ body {
   line-height: 1.4;
 }
 
+/* Property valuation — add/edit modal */
+.valuation-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.valuation-modal {
+  width: min(28rem, 100%);
+  max-height: min(90vh, 520px);
+  overflow: auto;
+  background: var(--color-surface, #fff);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.28);
+  padding: 1.25rem 1.35rem;
+  border: 1px solid var(--color-border);
+}
+
+.valuation-modal__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.valuation-modal__head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.35;
+}
+
+.valuation-modal__close {
+  flex-shrink: 0;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  padding: 0;
+  font-size: 1.35rem;
+  line-height: 1;
+  border-radius: var(--radius-md);
+}
+
+.property-valuation-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
 /* Real estate property — exclusive accordion (valuations / expenses / mortgage) */
 .property-accordions {
   display: grid;
