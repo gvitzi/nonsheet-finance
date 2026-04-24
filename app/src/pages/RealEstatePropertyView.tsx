@@ -599,7 +599,7 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
           <div className="property-accordion__body stack">
         <p className="page-subtitle">Date and value for this property.</p>
 
-        <div className="property-valuation-toolbar">
+        <div className="property-table-toolbar">
           <button
             className="btn btn-primary"
             type="button"
@@ -612,6 +612,30 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
           >
             Add valuation
           </button>
+          {selectedValuationId ? (
+            <div className="property-table-toolbar__actions">
+              <button
+                className="btn btn-sm"
+                type="button"
+                onClick={() => {
+                  const r = valuations.find((x) => x.id === selectedValuationId)
+                  if (!r) return
+                  setVEditing(r)
+                  setVForm({
+                    date: dateInputFromIso(r.date),
+                    value: String(r.value),
+                    currency: r.currency,
+                  })
+                  setValuationModalOpen(true)
+                }}
+              >
+                Edit
+              </button>
+              <button className="btn btn-sm btn-danger" type="button" onClick={() => void delValuation(selectedValuationId)}>
+                Delete
+              </button>
+            </div>
+          ) : null}
         </div>
 
         {valuations.length === 0 ? (
@@ -624,7 +648,6 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
                   <th>Date</th>
                   <th>Value</th>
                   <th>Property name</th>
-                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -644,31 +667,6 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
                     <td>{new Date(r.date).toLocaleDateString()}</td>
                     <td className="positive">{fmt(r.value, r.currency)}</td>
                     <td>{property.name}</td>
-                    <td className="actions" onClick={(e) => e.stopPropagation()}>
-                      {selectedValuationId === r.id ? (
-                        <>
-                          <button
-                            className="btn btn-sm"
-                            type="button"
-                            onClick={() => {
-                              setSelectedValuationId(r.id)
-                              setVEditing(r)
-                              setVForm({
-                                date: dateInputFromIso(r.date),
-                                value: String(r.value),
-                                currency: r.currency,
-                              })
-                              setValuationModalOpen(true)
-                            }}
-                          >
-                            Edit
-                          </button>
-                          <button className="btn btn-sm btn-danger" type="button" onClick={() => void delValuation(r.id)}>
-                            Delete
-                          </button>
-                        </>
-                      ) : null}
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -732,65 +730,67 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
         {expenses.length === 0 ? (
           <div className="empty-state">No expenses yet.</div>
         ) : (
-          <div className="property-table-scroll">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Name</th>
-                  <th>Description</th>
-                  <th>Amount</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {expenses.map((r) => (
-                  <tr
-                    key={r.id}
-                    className={`property-table-row--selectable${selectedExpenseId === r.id ? ' property-table-row--selected' : ''}`}
-                    tabIndex={0}
-                    aria-selected={selectedExpenseId === r.id}
-                    onClick={() => setSelectedExpenseId((prev) => (prev === r.id ? null : r.id))}
-                    onKeyDown={(e) => {
-                      if (e.key !== 'Enter' && e.key !== ' ') return
-                      e.preventDefault()
-                      setSelectedExpenseId((prev) => (prev === r.id ? null : r.id))
+          <>
+            {selectedExpenseId ? (
+              <div className="property-table-toolbar">
+                <div className="property-table-toolbar__actions">
+                  <button
+                    className="btn btn-sm"
+                    type="button"
+                    onClick={() => {
+                      const r = expenses.find((x) => x.id === selectedExpenseId)
+                      if (!r) return
+                      setEEditing(r)
+                      setEForm({
+                        date: dateInputFromIso(r.date),
+                        name: r.name,
+                        description: r.description ?? '',
+                        amount: String(r.amount),
+                      })
                     }}
                   >
-                    <td>{new Date(r.date).toLocaleDateString()}</td>
-                    <td>{r.name}</td>
-                    <td>{r.description?.trim() ? r.description : '—'}</td>
-                    <td className="negative">{fmt(r.amount, 'EUR')}</td>
-                    <td className="actions" onClick={(e) => e.stopPropagation()}>
-                      {selectedExpenseId === r.id ? (
-                        <>
-                          <button
-                            className="btn btn-sm"
-                            type="button"
-                            onClick={() => {
-                              setSelectedExpenseId(r.id)
-                              setEEditing(r)
-                              setEForm({
-                                date: dateInputFromIso(r.date),
-                                name: r.name,
-                                description: r.description ?? '',
-                                amount: String(r.amount),
-                              })
-                            }}
-                          >
-                            Edit
-                          </button>
-                          <button className="btn btn-sm btn-danger" type="button" onClick={() => void delExpense(r.id)}>
-                            Delete
-                          </button>
-                        </>
-                      ) : null}
-                    </td>
+                    Edit
+                  </button>
+                  <button className="btn btn-sm btn-danger" type="button" onClick={() => void delExpense(selectedExpenseId)}>
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            <div className="property-table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Amount</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {expenses.map((r) => (
+                    <tr
+                      key={r.id}
+                      className={`property-table-row--selectable${selectedExpenseId === r.id ? ' property-table-row--selected' : ''}`}
+                      tabIndex={0}
+                      aria-selected={selectedExpenseId === r.id}
+                      onClick={() => setSelectedExpenseId((prev) => (prev === r.id ? null : r.id))}
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter' && e.key !== ' ') return
+                        e.preventDefault()
+                        setSelectedExpenseId((prev) => (prev === r.id ? null : r.id))
+                      }}
+                    >
+                      <td>{new Date(r.date).toLocaleDateString()}</td>
+                      <td>{r.name}</td>
+                      <td>{r.description?.trim() ? r.description : '—'}</td>
+                      <td className="negative">{fmt(r.amount, 'EUR')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
           </div>
         </details>
@@ -854,65 +854,67 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
         {mortgages.length === 0 ? (
           <div className="empty-state">No mortgage rows yet.</div>
         ) : (
-          <div className="property-table-scroll">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Outstanding (debt)</th>
-                  <th>Loan name</th>
-                  <th>Property name</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {mortgages.map((r) => (
-                  <tr
-                    key={r.id}
-                    className={`property-table-row--selectable${selectedMortgageId === r.id ? ' property-table-row--selected' : ''}`}
-                    tabIndex={0}
-                    aria-selected={selectedMortgageId === r.id}
-                    onClick={() => setSelectedMortgageId((prev) => (prev === r.id ? null : r.id))}
-                    onKeyDown={(e) => {
-                      if (e.key !== 'Enter' && e.key !== ' ') return
-                      e.preventDefault()
-                      setSelectedMortgageId((prev) => (prev === r.id ? null : r.id))
+          <>
+            {selectedMortgageId ? (
+              <div className="property-table-toolbar">
+                <div className="property-table-toolbar__actions">
+                  <button
+                    className="btn btn-sm"
+                    type="button"
+                    onClick={() => {
+                      const r = mortgages.find((x) => x.id === selectedMortgageId)
+                      if (!r) return
+                      setMEditing(r)
+                      setMForm({
+                        date: dateInputFromIso(r.date),
+                        outstandingBalance: String(r.outstandingBalance),
+                        currency: r.currency,
+                        loanName: r.loanName ?? '',
+                      })
                     }}
                   >
-                    <td>{new Date(r.date).toLocaleDateString()}</td>
-                    <td className="negative">{fmt(r.outstandingBalance, r.currency)}</td>
-                    <td>{r.loanName ?? '—'}</td>
-                    <td>{property.name}</td>
-                    <td className="actions" onClick={(e) => e.stopPropagation()}>
-                      {selectedMortgageId === r.id ? (
-                        <>
-                          <button
-                            className="btn btn-sm"
-                            type="button"
-                            onClick={() => {
-                              setSelectedMortgageId(r.id)
-                              setMEditing(r)
-                              setMForm({
-                                date: dateInputFromIso(r.date),
-                                outstandingBalance: String(r.outstandingBalance),
-                                currency: r.currency,
-                                loanName: r.loanName ?? '',
-                              })
-                            }}
-                          >
-                            Edit
-                          </button>
-                          <button className="btn btn-sm btn-danger" type="button" onClick={() => void delMortgage(r.id)}>
-                            Delete
-                          </button>
-                        </>
-                      ) : null}
-                    </td>
+                    Edit
+                  </button>
+                  <button className="btn btn-sm btn-danger" type="button" onClick={() => void delMortgage(selectedMortgageId)}>
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            <div className="property-table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Outstanding (debt)</th>
+                    <th>Loan name</th>
+                    <th>Property name</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {mortgages.map((r) => (
+                    <tr
+                      key={r.id}
+                      className={`property-table-row--selectable${selectedMortgageId === r.id ? ' property-table-row--selected' : ''}`}
+                      tabIndex={0}
+                      aria-selected={selectedMortgageId === r.id}
+                      onClick={() => setSelectedMortgageId((prev) => (prev === r.id ? null : r.id))}
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter' && e.key !== ' ') return
+                        e.preventDefault()
+                        setSelectedMortgageId((prev) => (prev === r.id ? null : r.id))
+                      }}
+                    >
+                      <td>{new Date(r.date).toLocaleDateString()}</td>
+                      <td className="negative">{fmt(r.outstandingBalance, r.currency)}</td>
+                      <td>{r.loanName ?? '—'}</td>
+                      <td>{property.name}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
           </div>
         </details>
