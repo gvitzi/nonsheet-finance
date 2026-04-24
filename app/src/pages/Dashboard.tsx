@@ -16,6 +16,7 @@ import { convertAmountViaUsdFx, type FxRateRecord } from '@nonsheet-finance/core
 import { ApiError, api } from '../api'
 import type { DashboardSummary, GroupKind } from '../api'
 import { GROUP_KIND_LABELS, GROUP_KIND_ORDER, PORTFOLIOS_UPDATED_EVENT, labelForGroupKind } from '../groupKinds'
+import { GroupNavGlyph, resolveGroupNavIconId } from '../groupNavIcons'
 
 const fmt = (n: number) => n.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const COLORS = ['#4f8ef7', '#34d399', '#f97316', '#a78bfa', '#f43f5e', '#facc15', '#22d3ee']
@@ -647,27 +648,34 @@ export default function Dashboard() {
               <tr>
                 <th>Portfolio</th>
                 <th>Asset group</th>
-                <th>Type</th>
                 <th>Assets</th>
                 <th>Liabilities</th>
                 <th>Net Worth</th>
               </tr>
             </thead>
             <tbody>
-              {assetGroupTableRows.map((g) => (
+              {assetGroupTableRows.map((g, i) => {
+                const groupColor = g.color?.trim() || COLORS[i % COLORS.length]
+                return (
                 <tr key={g.id}>
                   <td>{g.portfolioName}</td>
                   <td>
-                    <span className="dot" style={{ background: g.color ?? '#888' }} /> {g.name}
-                  </td>
-                  <td>
-                    <span className="badge">{labelForGroupKind(g.kind)}</span>
+                    <span className="dashboard-asset-group-cell">
+                      <span className="dashboard-asset-group-cell__icon" style={{ color: groupColor }}>
+                        <GroupNavGlyph
+                          iconId={resolveGroupNavIconId(g.kind)}
+                          title={labelForGroupKind(g.kind)}
+                        />
+                      </span>
+                      <span>{g.name}</span>
+                    </span>
                   </td>
                   <td className="positive">{fmtMoney(g.totalAssets, viewCurrencyCode)}</td>
                   <td className="negative">{fmtMoney(g.totalLiabilities, viewCurrencyCode)}</td>
                   <td className={g.netWorth >= 0 ? 'positive' : 'negative'}>{fmtMoney(g.netWorth, viewCurrencyCode)}</td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </div>

@@ -1470,6 +1470,25 @@ body {
   flex-shrink: 0;
 }
 
+/* Dashboard asset group summary: type icon (group color) + name */
+.dashboard-asset-group-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  vertical-align: middle;
+}
+
+.dashboard-asset-group-cell__icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+.dashboard-asset-group-cell__icon .nav-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
