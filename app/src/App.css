@@ -338,7 +338,8 @@ body {
   max-width: 22rem;
 }
 
-.property-table-name__link {
+.property-table-name__link,
+.property-table-name__text {
   font-weight: 600;
   font-size: 0.9375rem;
   letter-spacing: -0.02em;
@@ -1857,6 +1858,10 @@ body {
   border-radius: 0;
 }
 
+.re-property-table-wrap td.actions {
+  min-width: 9rem;
+}
+
 .re-property-card {
   margin: 0;
   padding: 1rem 1.05rem;
@@ -1885,11 +1890,11 @@ body {
   border-radius: var(--radius-sm);
 }
 
-.re-property-card__title:hover {
+a.re-property-card__title:hover {
   color: var(--color-primary);
 }
 
-.re-property-card__title:focus-visible {
+a.re-property-card__title:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
@@ -1932,6 +1937,10 @@ body {
   margin-top: 0.85rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 @media (max-width: 767px) {
@@ -2973,6 +2982,11 @@ tbody tr:last-child td {
 
 .negative {
   color: #b91c1c;
+  font-weight: 600;
+}
+
+.amount-zero {
+  color: var(--color-text-muted);
   font-weight: 600;
 }
 

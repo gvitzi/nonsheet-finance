@@ -172,15 +172,6 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
     }
   }
 
-  const archiveProperty = async (id: string) => {
-    try {
-      await api.properties.archive(id)
-      load()
-    } catch (e: unknown) {
-      setBanner({ type: 'err', text: err(e, 'Failed to archive property.') })
-    }
-  }
-
   const unarchiveProperty = async (id: string) => {
     try {
       await api.properties.unarchive(id)
@@ -282,9 +273,7 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
                   role="listitem"
                 >
                   <div className="re-property-card__head">
-                    <Link className="re-property-card__title" to={assetGroupPropertyPath(portfolioId, assetGroupId, p.id)}>
-                      {p.name}
-                    </Link>
+                    <span className="re-property-card__title">{p.name}</span>
                     {p.description?.trim() ? <p className="re-property-card__subtitle">{p.description.trim()}</p> : null}
                   </div>
                   <dl className="re-property-card__dl">
@@ -304,15 +293,18 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
                     </RePropertyStat>
                   </dl>
                   <div className="re-property-card__actions">
+                    <Link
+                      className="btn btn-sm btn-primary"
+                      to={assetGroupPropertyPath(portfolioId, assetGroupId, p.id)}
+                      aria-label={`View ${p.name}`}
+                    >
+                      View
+                    </Link>
                     {p.archivedAt ? (
                       <button className="btn btn-sm" type="button" onClick={() => unarchiveProperty(p.id)}>
                         Unarchive
                       </button>
-                    ) : (
-                      <button className="btn btn-sm" type="button" onClick={() => archiveProperty(p.id)}>
-                        Archive
-                      </button>
-                    )}
+                    ) : null}
                   </div>
                 </article>
               )
@@ -340,9 +332,7 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
                     <tr key={p.id} className={p.archivedAt ? 'row--archived' : undefined}>
                       <td>
                         <div className="property-table-name">
-                          <Link className="property-table-name__link" to={assetGroupPropertyPath(portfolioId, assetGroupId, p.id)}>
-                            {p.name}
-                          </Link>
+                          <span className="property-table-name__text">{p.name}</span>
                           {p.description?.trim() ? (
                             <span className="property-table-name__meta">{p.description.trim()}</span>
                           ) : null}
@@ -355,15 +345,18 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
                       <td>{m.mortgagePayment}</td>
                       <td className={m.cashflowClass}>{m.cashflow}</td>
                       <td className="actions">
+                        <Link
+                          className="btn btn-sm btn-primary"
+                          to={assetGroupPropertyPath(portfolioId, assetGroupId, p.id)}
+                          aria-label={`View ${p.name}`}
+                        >
+                          View
+                        </Link>
                         {p.archivedAt ? (
                           <button className="btn btn-sm" type="button" onClick={() => unarchiveProperty(p.id)}>
                             Unarchive
                           </button>
-                        ) : (
-                          <button className="btn btn-sm" type="button" onClick={() => archiveProperty(p.id)}>
-                            Archive
-                          </button>
-                        )}
+                        ) : null}
                       </td>
                     </tr>
                   )

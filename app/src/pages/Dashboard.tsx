@@ -506,7 +506,11 @@ export default function Dashboard() {
                 ? 'Liabilities (this Asset Group)'
                 : 'Liabilities (filtered)'}
           </span>
-          <strong className="negative">{fmtMoney(viewDisplayTotals.totalLiabilities, viewCurrencyCode)}</strong>
+          <strong
+            className={viewDisplayTotals.totalLiabilities === 0 ? 'amount-zero' : 'negative'}
+          >
+            {fmtMoney(viewDisplayTotals.totalLiabilities, viewCurrencyCode)}
+          </strong>
         </div>
         <div className="summary-card">
           <span className="label">{filterActive ? 'Portfolios in view' : 'Portfolios'}</span>
@@ -671,7 +675,9 @@ export default function Dashboard() {
                     </span>
                   </td>
                   <td className="positive">{fmtMoney(g.totalAssets, viewCurrencyCode)}</td>
-                  <td className="negative">{fmtMoney(g.totalLiabilities, viewCurrencyCode)}</td>
+                  <td className={g.totalLiabilities === 0 ? 'amount-zero' : 'negative'}>
+                    {fmtMoney(g.totalLiabilities, viewCurrencyCode)}
+                  </td>
                   <td className={g.netWorth >= 0 ? 'positive' : 'negative'}>{fmtMoney(g.netWorth, viewCurrencyCode)}</td>
                 </tr>
                 )
