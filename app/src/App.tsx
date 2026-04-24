@@ -482,6 +482,7 @@ function App() {
           id="app-sidebar"
           className={`sidebar${sidebarCollapsed ? ' sidebar--collapsed' : ''}${compactNav && !sidebarCollapsed ? ' sidebar--mobile-overlay' : ''}`}
           aria-label="Primary navigation"
+          aria-hidden={compactNav && sidebarCollapsed ? true : undefined}
         >
           <nav className="sidebar-nav">
             <ul className="nav-list">

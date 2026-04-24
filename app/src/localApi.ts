@@ -225,6 +225,7 @@ export const api = {
       name: string
       description?: string | null
       notes?: string | null
+      address?: string | null
       monthlyRent?: number | null
       monthlyMortgagePayment?: number | null
     }): Promise<Property> => {
@@ -239,6 +240,7 @@ export const api = {
         name: data.name,
         description: data.description ?? null,
         notes: data.notes ?? null,
+        address: data.address ?? null,
         monthlyRent: data.monthlyRent ?? null,
         monthlyMortgagePayment: data.monthlyMortgagePayment ?? null,
         archivedAt: null,
@@ -251,7 +253,9 @@ export const api = {
     },
     update: (
       id: string,
-      data: Partial<Pick<Property, 'name' | 'description' | 'notes' | 'monthlyRent' | 'monthlyMortgagePayment'>>,
+      data: Partial<
+        Pick<Property, 'name' | 'description' | 'notes' | 'address' | 'monthlyRent' | 'monthlyMortgagePayment'>
+      >,
     ): Promise<Property> => {
       const t = nowIso()
       updateWealthDocument((d) => ({

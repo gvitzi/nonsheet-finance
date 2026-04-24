@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError, api } from '../api'
 import type { AssetGroup, Property, PropertyMortgageEntry, PropertyValuation } from '../api'
@@ -25,6 +25,43 @@ function latestByDate<T extends { date: string }>(rows: T[]): T | undefined {
 
 type Row = Property & { latestValuation?: PropertyValuation | null; latestMortgage?: PropertyMortgageEntry | null }
 
+function getPropertyListMetrics(p: Row) {
+  const value = p.latestValuation ? fmt(p.latestValuation.value, p.latestValuation.currency) : '—'
+  const liabilities = p.latestMortgage ? fmt(p.latestMortgage.outstandingBalance, p.latestMortgage.currency) : '—'
+  let netValue = '—'
+  let netValueClass: string | undefined
+  if (p.latestValuation) {
+    const net = p.latestValuation.value - (p.latestMortgage?.outstandingBalance ?? 0)
+    netValue = fmt(net, p.latestValuation.currency)
+    netValueClass = net >= 0 ? 'positive' : 'negative'
+  }
+  const cashflowClass =
+    p.monthlyCashflow == null || Number.isNaN(p.monthlyCashflow)
+      ? undefined
+      : p.monthlyCashflow >= 0
+        ? 'positive'
+        : 'negative'
+  return {
+    value,
+    liabilities,
+    netValue,
+    netValueClass,
+    rent: fmtMonthly(p.monthlyRent),
+    mortgagePayment: fmtMonthly(p.monthlyMortgagePayment),
+    cashflow: fmtMonthly(p.monthlyCashflow),
+    cashflowClass,
+  }
+}
+
+function RePropertyStat({ label, children, valueClass }: { label: string; children: ReactNode; valueClass?: string }) {
+  return (
+    <>
+      <dt className="re-property-card__dt">{label}</dt>
+      <dd className={['re-property-card__dd', valueClass].filter(Boolean).join(' ')}>{children}</dd>
+    </>
+  )
+}
+
 type Props = {
   group: AssetGroup
   portfolioId: string
@@ -35,6 +72,7 @@ const emptyForm = {
   name: '',
   description: '',
   notes: '',
+  address: '',
   monthlyRent: '',
   monthlyMortgagePayment: '',
 }
@@ -123,6 +161,7 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
         name: form.name.trim(),
         description: form.description.trim() || null,
         notes: form.notes.trim() || null,
+        address: form.address.trim() || null,
         monthlyRent: parseOptionalMoney(form.monthlyRent),
         monthlyMortgagePayment: parseOptionalMoney(form.monthlyMortgagePayment),
       })
@@ -210,6 +249,10 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
               Notes
               <textarea rows={4} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
             </label>
+            <label className="span-2">
+              Address
+              <textarea rows={2} value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} />
+            </label>
             <label>
               Rent (monthly)
               <input type="number" step="0.01" value={form.monthlyRent} onChange={(e) => setForm((f) => ({ ...f, monthlyRent: e.target.value }))} />
@@ -236,75 +279,107 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
       {rows.length === 0 ? (
         <div className="empty-state">No properties yet. Add one to track valuations and mortgage over time.</div>
       ) : (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Property</th>
-              <th>Value</th>
-              <th>Liabilities</th>
-              <th>Net Value</th>
-              <th>Rent</th>
-              <th>Mortgage monthly payment</th>
-              <th>Net cashflow</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((p) => (
-              <tr key={p.id} className={p.archivedAt ? 'row--archived' : undefined}>
-                <td>
-                  <div className="property-table-name">
-                    <Link className="property-table-name__link" to={assetGroupPropertyPath(portfolioId, assetGroupId, p.id)}>
+        <>
+          <div className="re-property-cards" role="list" aria-label="Properties">
+            {rows.map((p) => {
+              const m = getPropertyListMetrics(p)
+              return (
+                <article
+                  key={p.id}
+                  className={`re-property-card${p.archivedAt ? ' re-property-card--archived' : ''}`}
+                  role="listitem"
+                >
+                  <div className="re-property-card__head">
+                    <Link className="re-property-card__title" to={assetGroupPropertyPath(portfolioId, assetGroupId, p.id)}>
                       {p.name}
                     </Link>
-                    {p.description?.trim() ? (
-                      <span className="property-table-name__meta">{p.description.trim()}</span>
-                    ) : null}
+                    {p.description?.trim() ? <p className="re-property-card__subtitle">{p.description.trim()}</p> : null}
                   </div>
-                </td>
-                <td className="positive">
-                  {p.latestValuation ? fmt(p.latestValuation.value, p.latestValuation.currency) : '—'}
-                </td>
-                <td className="negative">
-                  {p.latestMortgage ? fmt(p.latestMortgage.outstandingBalance, p.latestMortgage.currency) : '—'}
-                </td>
-                <td className={
-                  p.latestValuation
-                    ? (p.latestValuation.value - (p.latestMortgage?.outstandingBalance ?? 0)) >= 0 ? 'positive' : 'negative'
-                    : undefined
-                }>
-                  {p.latestValuation
-                    ? fmt(p.latestValuation.value - (p.latestMortgage?.outstandingBalance ?? 0), p.latestValuation.currency)
-                    : '—'}
-                </td>
-                <td>{fmtMonthly(p.monthlyRent)}</td>
-                <td>{fmtMonthly(p.monthlyMortgagePayment)}</td>
-                <td
-                  className={
-                    p.monthlyCashflow == null || Number.isNaN(p.monthlyCashflow)
-                      ? undefined
-                      : p.monthlyCashflow >= 0
-                        ? 'positive'
-                        : 'negative'
-                  }
-                >
-                  {fmtMonthly(p.monthlyCashflow)}
-                </td>
-                <td className="actions">
-                  {p.archivedAt ? (
-                    <button className="btn btn-sm" type="button" onClick={() => unarchiveProperty(p.id)}>
-                      Unarchive
-                    </button>
-                  ) : (
-                    <button className="btn btn-sm" type="button" onClick={() => archiveProperty(p.id)}>
-                      Archive
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  <dl className="re-property-card__dl">
+                    <RePropertyStat label="Value" valueClass="positive">
+                      {m.value}
+                    </RePropertyStat>
+                    <RePropertyStat label="Liabilities" valueClass="negative">
+                      {m.liabilities}
+                    </RePropertyStat>
+                    <RePropertyStat label="Net value" valueClass={m.netValueClass}>
+                      {m.netValue}
+                    </RePropertyStat>
+                    <RePropertyStat label="Rent (monthly)">{m.rent}</RePropertyStat>
+                    <RePropertyStat label="Mortgage monthly payment">{m.mortgagePayment}</RePropertyStat>
+                    <RePropertyStat label="Net cashflow" valueClass={m.cashflowClass}>
+                      {m.cashflow}
+                    </RePropertyStat>
+                  </dl>
+                  <div className="re-property-card__actions">
+                    {p.archivedAt ? (
+                      <button className="btn btn-sm" type="button" onClick={() => unarchiveProperty(p.id)}>
+                        Unarchive
+                      </button>
+                    ) : (
+                      <button className="btn btn-sm" type="button" onClick={() => archiveProperty(p.id)}>
+                        Archive
+                      </button>
+                    )}
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+
+          <div className="re-property-table-wrap">
+            <table className="table re-property-table--desktop">
+              <thead>
+                <tr>
+                  <th>Property</th>
+                  <th>Value</th>
+                  <th>Liabilities</th>
+                  <th>Net Value</th>
+                  <th>Rent</th>
+                  <th>Mortgage monthly payment</th>
+                  <th>Net cashflow</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((p) => {
+                  const m = getPropertyListMetrics(p)
+                  return (
+                    <tr key={p.id} className={p.archivedAt ? 'row--archived' : undefined}>
+                      <td>
+                        <div className="property-table-name">
+                          <Link className="property-table-name__link" to={assetGroupPropertyPath(portfolioId, assetGroupId, p.id)}>
+                            {p.name}
+                          </Link>
+                          {p.description?.trim() ? (
+                            <span className="property-table-name__meta">{p.description.trim()}</span>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="positive">{m.value}</td>
+                      <td className="negative">{m.liabilities}</td>
+                      <td className={m.netValueClass}>{m.netValue}</td>
+                      <td>{m.rent}</td>
+                      <td>{m.mortgagePayment}</td>
+                      <td className={m.cashflowClass}>{m.cashflow}</td>
+                      <td className="actions">
+                        {p.archivedAt ? (
+                          <button className="btn btn-sm" type="button" onClick={() => unarchiveProperty(p.id)}>
+                            Unarchive
+                          </button>
+                        ) : (
+                          <button className="btn btn-sm" type="button" onClick={() => archiveProperty(p.id)}>
+                            Archive
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   )
