@@ -333,7 +333,8 @@ export default function Dashboard() {
       <>No Asset Groups match the current filters. Try another portfolio, type, or Asset Group.</>
     ) : displayTotals.scope === 'all' ? (
       <>
-        Current totals combine manual assets and liabilities with the latest real-estate valuation and mortgage per property. The
+        Current totals combine manual assets and liabilities with the latest real-estate valuation and summed mortgage debt per
+        property (latest mark per loan plus any legacy marks). The
         timeline shows <strong>net worth per asset group</strong> over time plus a dashed <strong>total</strong> portfolio line.
       </>
     ) : filterAssetGroupId ? (

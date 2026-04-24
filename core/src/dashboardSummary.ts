@@ -1,5 +1,6 @@
 import type { WealthDocument } from './document.js'
 import { convertAmountViaFxRates } from './fxUsd.js'
+import { mortgageDebtContributionsAsOf } from './propertyMortgageAggregate.js'
 import {
   computeNetWorthByAssetGroupAtDates,
   computeNetWorthHistorySeries,
@@ -138,6 +139,7 @@ export function computeDashboardSummary(doc: WealthDocument): DashboardSummaryPa
       date: toDate(m.date),
       outstandingBalance: m.outstandingBalance,
       currency: m.currency,
+      loanId: m.loanId,
     })),
   }))
 
@@ -152,6 +154,7 @@ export function computeDashboardSummary(doc: WealthDocument): DashboardSummaryPa
       date: toDate(m.date),
       outstandingBalance: m.outstandingBalance,
       currency: m.currency,
+      loanId: m.loanId,
     })),
   }))
 
@@ -242,22 +245,33 @@ export function computeDashboardSummary(doc: WealthDocument): DashboardSummaryPa
   let propertyLiabilitySum = 0
   const propertyContributionByAssetGroup: Record<string, { assets: number; liabilities: number }> = {}
 
+  const nowForMortgages = new Date()
   for (const p of properties) {
     const vals = valuationsByProperty.get(p.id) ?? []
     const morts = mortgagesByProperty.get(p.id) ?? []
     const latestV = latestByDate(vals)
-    const latestM = latestByDate(morts)
     const v = latestV?.value ?? 0
     const vCur = latestV?.currency ?? 'USD'
-    const m = latestM?.outstandingBalance ?? 0
-    const mCur = latestM?.currency ?? 'USD'
+    const mContrib = mortgageDebtContributionsAsOf(
+      morts.map((m) => ({
+        date: m.date,
+        loanId: m.loanId,
+        outstandingBalance: m.outstandingBalance,
+        currency: m.currency,
+      })),
+      nowForMortgages,
+    )
+    let mSum = 0
+    for (const c of mContrib) {
+      mSum += cvt(c.value, c.currency)
+    }
     propertyAssetSum += cvt(v, vCur)
-    propertyLiabilitySum += cvt(m, mCur)
+    propertyLiabilitySum += mSum
     if (!propertyContributionByAssetGroup[p.assetGroupId]) {
       propertyContributionByAssetGroup[p.assetGroupId] = { assets: 0, liabilities: 0 }
     }
     propertyContributionByAssetGroup[p.assetGroupId].assets += cvt(v, vCur)
-    propertyContributionByAssetGroup[p.assetGroupId].liabilities += cvt(m, mCur)
+    propertyContributionByAssetGroup[p.assetGroupId].liabilities += mSum
   }
 
   const totalAssets = manualAssets + propertyAssetSum

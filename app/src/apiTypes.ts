@@ -75,13 +75,28 @@ export interface PropertyValuation {
   updatedAt: string
 }
 
+export interface PropertyLoan {
+  id: string
+  propertyId: string
+  name: string
+  endDate: string
+  interestAnnualPercent: number | null
+  property?: { id: string; name: string }
+  createdAt: string
+  updatedAt: string
+}
+
 export interface PropertyMortgageEntry {
   id: string
   propertyId: string
   date: string
   outstandingBalance: number
   currency: string
+  /** @deprecated Prefer `loanId` and loan name. */
   loanName?: string | null
+  loanId?: string | null
+  principalMonthlyPayment?: number | null
+  interestMonthlyPayment?: number | null
   property?: { id: string; name: string }
   createdAt: string
   updatedAt: string
