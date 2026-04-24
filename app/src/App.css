@@ -1657,6 +1657,77 @@ body {
   font-size: 0.875rem;
 }
 
+.property-loan-accordion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.property-loan-accordion.property-accordion {
+  margin: 0;
+}
+
+.property-loan-accordion__summary.property-accordion__summary {
+  font-size: 1rem;
+}
+
+.property-loan-accordion__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.property-loan-accordion__debt {
+  flex-shrink: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.property-loan-readonly {
+  display: grid;
+  gap: 0.35rem 1rem;
+  padding: 0.35rem 0 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 0.25rem;
+}
+
+.property-loan-readonly__row {
+  display: grid;
+  grid-template-columns: minmax(7rem, 11rem) 1fr;
+  gap: 0.5rem 1rem;
+  align-items: baseline;
+  font-size: 0.9rem;
+}
+
+.property-loan-readonly__label {
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.property-loan-readonly__value {
+  color: var(--color-text);
+  word-break: break-word;
+}
+
+.property-loan-readonly__value--emph {
+  font-weight: 600;
+}
+
+.property-loan-readonly__asof {
+  font-weight: 400;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.property-loan-marks-title {
+  margin-top: 0.75rem;
+}
+
 .property-loan-summary-list {
   margin: 0.25rem 0 0;
   padding-left: 1.15rem;

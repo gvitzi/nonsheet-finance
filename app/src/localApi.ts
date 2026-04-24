@@ -436,7 +436,15 @@ export const api = {
     },
     createLoan: (
       propertyId: string,
-      data: { name: string; endDate: string; interestAnnualPercent?: number | null },
+      data: {
+        name: string
+        startDate: string | null
+        endDate: string
+        interestAnnualPercent?: number | null
+        originalLoanAmount?: number | null
+        amortizationAnnualPercent?: number | null
+        remainingDebtAfterFixedPeriod?: number | null
+      },
     ): Promise<PropertyLoan> => {
       const d0 = getWealthDocument()
       if (!d0.properties.some((p) => p.id === propertyId)) return rej(404, 'Property not found')
@@ -445,11 +453,15 @@ export const api = {
         id: randomId(),
         propertyId,
         name: data.name.trim() || 'Loan',
+        startDate: data.startDate != null && data.startDate !== '' ? data.startDate.slice(0, 10) : null,
         endDate: data.endDate.slice(0, 10),
         interestAnnualPercent:
           data.interestAnnualPercent === undefined || data.interestAnnualPercent === null
             ? null
             : data.interestAnnualPercent,
+        originalLoanAmount: data.originalLoanAmount ?? null,
+        amortizationAnnualPercent: data.amortizationAnnualPercent ?? null,
+        remainingDebtAfterFixedPeriod: data.remainingDebtAfterFixedPeriod ?? null,
         createdAt,
         updatedAt,
       }
@@ -464,7 +476,15 @@ export const api = {
     updateLoan: (
       propertyId: string,
       loanId: string,
-      data: Partial<{ name: string; endDate: string; interestAnnualPercent: number | null }>,
+      data: Partial<{
+        name: string
+        startDate: string | null
+        endDate: string
+        interestAnnualPercent: number | null
+        originalLoanAmount: number | null
+        amortizationAnnualPercent: number | null
+        remainingDebtAfterFixedPeriod: number | null
+      }>,
     ): Promise<PropertyLoan> => {
       const t = nowIso()
       updateWealthDocument((d) => ({
@@ -474,8 +494,19 @@ export const api = {
             ? {
                 ...l,
                 ...('name' in data && data.name !== undefined ? { name: data.name.trim() || l.name } : {}),
+                ...('startDate' in data && data.startDate !== undefined
+                  ? {
+                      startDate:
+                        data.startDate != null && data.startDate !== '' ? data.startDate.slice(0, 10) : null,
+                    }
+                  : {}),
                 ...('endDate' in data && data.endDate !== undefined ? { endDate: data.endDate.slice(0, 10) } : {}),
                 ...('interestAnnualPercent' in data ? { interestAnnualPercent: data.interestAnnualPercent } : {}),
+                ...('originalLoanAmount' in data ? { originalLoanAmount: data.originalLoanAmount } : {}),
+                ...('amortizationAnnualPercent' in data ? { amortizationAnnualPercent: data.amortizationAnnualPercent } : {}),
+                ...('remainingDebtAfterFixedPeriod' in data
+                  ? { remainingDebtAfterFixedPeriod: data.remainingDebtAfterFixedPeriod }
+                  : {}),
                 updatedAt: t,
               }
             : l,
