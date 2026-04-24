@@ -1680,11 +1680,19 @@ body {
   border-radius: var(--radius-md);
 }
 
-.property-valuation-toolbar {
+.property-table-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.property-table-toolbar__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  margin-bottom: 0.75rem;
+  margin-left: auto;
 }
 
 /* Real estate property — exclusive accordion (valuations / expenses / mortgage) */
