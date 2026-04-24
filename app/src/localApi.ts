@@ -1,14 +1,18 @@
 import {
+  activeRentPeriodForProperty,
   computeDashboardSummary,
   computeGroupHistory,
   decodeSecurityValuationId,
+  findOverlappingRentPeriods,
   mergeFxRateRecords,
   mergeSecurityInfoRecords,
   newEntityTimestamps,
+  rentPeriodDateYmd,
   securityValuationIdForAsset,
   tryCoerceFxRateImportRow,
   type FxRateRecord,
   type GroupHistoryItem,
+  type PropertyRentPeriodRecord,
   type SecurityValuationRecord,
   type WealthDocument,
 } from '@nonsheet-finance/core'
@@ -24,6 +28,7 @@ import type {
   Property,
   PropertyExpense,
   PropertyMortgageEntry,
+  PropertyRentPeriod,
   PropertyValuation,
   SecurityInfoRecord,
   SecurityInfoRecordInput,
@@ -71,6 +76,24 @@ function derivedMonthlyCashflow(
   return (r ?? 0) - (m ?? 0)
 }
 
+function localCalendarYmd(): string {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function normalizeTenantNames(names: string[] | undefined): string[] {
+  if (!names?.length) return []
+  return names.map((s) => String(s).trim()).filter((s) => s.length > 0)
+}
+
+function assertRentPeriodNoOverlap(doc: WealthDocument, candidate: PropertyRentPeriodRecord, ignoreId?: string): void {
+  const hits = findOverlappingRentPeriods(doc.propertyRentPeriods, candidate, ignoreId)
+  if (hits.length > 0) throw new ApiError('This rent period overlaps an existing one for this property.', 400)
+}
+
 function infoByIsin(doc: WealthDocument): Map<string, { ticker: string; name: string }> {
   const m = new Map<string, { ticker: string; name: string }>()
   for (const r of doc.securityInfo) {
@@ -105,9 +128,15 @@ function enrichAsset(doc: WealthDocument, a: (typeof doc.assets)[0]): Asset {
 
 function serializeProperty(doc: WealthDocument, p: (typeof doc.properties)[0]): Property {
   const ag = doc.assetGroups.find((g) => g.id === p.assetGroupId)
+  const active = activeRentPeriodForProperty(doc.propertyRentPeriods, p.id, localCalendarYmd())
+  const effectiveMonthlyRent = active ? active.rent : 0
+  const effectiveMonthlyHausgeld = active ? active.hausgeld : 0
+  const rentTotal = effectiveMonthlyRent + effectiveMonthlyHausgeld
   return {
     ...p,
-    monthlyCashflow: derivedMonthlyCashflow(p.monthlyRent, p.monthlyMortgagePayment),
+    effectiveMonthlyRent,
+    effectiveMonthlyHausgeld,
+    monthlyCashflow: derivedMonthlyCashflow(rentTotal, p.monthlyMortgagePayment),
     assetGroup: ag ? { id: ag.id, name: ag.name, kind: ag.kind } : undefined,
   } as Property
 }
@@ -226,7 +255,6 @@ export const api = {
       description?: string | null
       notes?: string | null
       address?: string | null
-      monthlyRent?: number | null
       monthlyMortgagePayment?: number | null
     }): Promise<Property> => {
       const d0 = getWealthDocument()
@@ -241,7 +269,7 @@ export const api = {
         description: data.description ?? null,
         notes: data.notes ?? null,
         address: data.address ?? null,
-        monthlyRent: data.monthlyRent ?? null,
+        monthlyRent: null,
         monthlyMortgagePayment: data.monthlyMortgagePayment ?? null,
         archivedAt: null,
         createdAt,
@@ -253,9 +281,7 @@ export const api = {
     },
     update: (
       id: string,
-      data: Partial<
-        Pick<Property, 'name' | 'description' | 'notes' | 'address' | 'monthlyRent' | 'monthlyMortgagePayment'>
-      >,
+      data: Partial<Pick<Property, 'name' | 'description' | 'notes' | 'address' | 'monthlyMortgagePayment'>>,
     ): Promise<Property> => {
       const t = nowIso()
       updateWealthDocument((d) => ({
@@ -272,6 +298,7 @@ export const api = {
         propertyValuations: d.propertyValuations.filter((v) => v.propertyId !== id),
         propertyMortgages: d.propertyMortgages.filter((m) => m.propertyId !== id),
         propertyExpenses: d.propertyExpenses.filter((e) => e.propertyId !== id),
+        propertyRentPeriods: d.propertyRentPeriods.filter((r) => r.propertyId !== id),
       }))
       notifyPortfolios()
       return Promise.resolve()
@@ -434,6 +461,119 @@ export const api = {
       }))
       return Promise.resolve()
     },
+    listRentPeriods: (propertyId: string): Promise<PropertyRentPeriod[]> => {
+      const d = getWealthDocument()
+      const rows = d.propertyRentPeriods
+        .filter((r) => r.propertyId === propertyId)
+        .sort((a, b) => rentPeriodDateYmd(b.startDate).localeCompare(rentPeriodDateYmd(a.startDate)))
+      return Promise.resolve(
+        rows.map((r) => {
+          const prop = d.properties.find((p) => p.id === propertyId)
+          return { ...r, property: prop ? { id: prop.id, name: prop.name } : undefined } as PropertyRentPeriod
+        }),
+      )
+    },
+    createRentPeriod: (
+      propertyId: string,
+      data: {
+        startDate: string
+        endDate?: string | null
+        rent: number
+        hausgeld?: number
+        tenantNames?: string[]
+        notes?: string | null
+      },
+    ): Promise<PropertyRentPeriod> => {
+      const d0 = getWealthDocument()
+      if (!d0.properties.some((p) => p.id === propertyId)) return rej(404, 'Property not found')
+      if (Number.isNaN(data.rent) || data.rent < 0) return rej(400, 'Rent must be a non-negative number.')
+      const hg = data.hausgeld ?? 0
+      if (Number.isNaN(hg) || hg < 0) return rej(400, 'Hausgeld must be a non-negative number.')
+      const startYmd = rentPeriodDateYmd(data.startDate)
+      const endYmd =
+        data.endDate != null && String(data.endDate).trim() !== '' ? rentPeriodDateYmd(String(data.endDate)) : null
+      if (startYmd.length < 10) return rej(400, 'Start date is required.')
+      if (endYmd != null && endYmd.length >= 10 && endYmd < startYmd) return rej(400, 'End date must be on or after start date.')
+      const { createdAt, updatedAt } = newEntityTimestamps()
+      const row: PropertyRentPeriodRecord = {
+        id: randomId(),
+        propertyId,
+        startDate: new Date(startYmd + 'T12:00:00').toISOString(),
+        endDate: endYmd != null && endYmd.length >= 10 ? new Date(endYmd + 'T12:00:00').toISOString() : null,
+        rent: data.rent,
+        hausgeld: hg,
+        tenantNames: normalizeTenantNames(data.tenantNames),
+        notes: data.notes?.trim() ? data.notes.trim() : null,
+        createdAt,
+        updatedAt,
+      }
+      assertRentPeriodNoOverlap(d0, row)
+      updateWealthDocument((d) => ({ ...d, propertyRentPeriods: [...d.propertyRentPeriods, row] }))
+      notifyPortfolios()
+      const prop = d0.properties.find((p) => p.id === propertyId)
+      return Promise.resolve({ ...row, property: prop ? { id: prop.id, name: prop.name } : undefined } as PropertyRentPeriod)
+    },
+    updateRentPeriod: (
+      propertyId: string,
+      periodId: string,
+      data: Partial<{
+        startDate: string
+        endDate: string | null
+        rent: number
+        hausgeld: number
+        tenantNames: string[]
+        notes: string | null
+      }>,
+    ): Promise<PropertyRentPeriod> => {
+      const d0 = getWealthDocument()
+      const prev = d0.propertyRentPeriods.find((r) => r.id === periodId && r.propertyId === propertyId)
+      if (!prev) return rej(404, 'Not found')
+      const t = nowIso()
+      const startYmd = data.startDate !== undefined ? rentPeriodDateYmd(data.startDate) : rentPeriodDateYmd(prev.startDate)
+      let endYmd: string | null
+      if (data.endDate === undefined) {
+        endYmd = prev.endDate != null && prev.endDate !== '' ? rentPeriodDateYmd(prev.endDate) : null
+      } else if (data.endDate === null || String(data.endDate).trim() === '') {
+        endYmd = null
+      } else {
+        endYmd = rentPeriodDateYmd(String(data.endDate))
+      }
+      if (startYmd.length < 10) return rej(400, 'Start date is required.')
+      if (endYmd != null && endYmd.length >= 10 && endYmd < startYmd) return rej(400, 'End date must be on or after start date.')
+      const rent = data.rent !== undefined ? data.rent : prev.rent
+      if (Number.isNaN(rent) || rent < 0) return rej(400, 'Rent must be a non-negative number.')
+      const hausgeld = data.hausgeld !== undefined ? data.hausgeld : prev.hausgeld
+      if (Number.isNaN(hausgeld) || hausgeld < 0) return rej(400, 'Hausgeld must be a non-negative number.')
+      const candidate: PropertyRentPeriodRecord = {
+        ...prev,
+        startDate: new Date(startYmd + 'T12:00:00').toISOString(),
+        endDate: endYmd != null && endYmd.length >= 10 ? new Date(endYmd + 'T12:00:00').toISOString() : null,
+        rent,
+        hausgeld,
+        tenantNames: data.tenantNames !== undefined ? normalizeTenantNames(data.tenantNames) : prev.tenantNames,
+        notes: data.notes !== undefined ? (data.notes?.trim() ? data.notes.trim() : null) : prev.notes,
+        updatedAt: t,
+      }
+      assertRentPeriodNoOverlap(d0, candidate, periodId)
+      updateWealthDocument((d) => ({
+        ...d,
+        propertyRentPeriods: d.propertyRentPeriods.map((r) => (r.id === periodId && r.propertyId === propertyId ? candidate : r)),
+      }))
+      notifyPortfolios()
+      const d = getWealthDocument()
+      const out = d.propertyRentPeriods.find((x) => x.id === periodId)
+      if (!out) return rej(404, 'Not found')
+      const prop = d.properties.find((p) => p.id === propertyId)
+      return Promise.resolve({ ...out, property: prop ? { id: prop.id, name: prop.name } : undefined } as PropertyRentPeriod)
+    },
+    deleteRentPeriod: (propertyId: string, periodId: string): Promise<void> => {
+      updateWealthDocument((d) => ({
+        ...d,
+        propertyRentPeriods: d.propertyRentPeriods.filter((r) => !(r.id === periodId && r.propertyId === propertyId)),
+      }))
+      notifyPortfolios()
+      return Promise.resolve()
+    },
   },
 
   portfolios: {
@@ -494,6 +634,7 @@ export const api = {
           propertyValuations: d.propertyValuations.filter((v) => !propertyIds.includes(v.propertyId)),
           propertyMortgages: d.propertyMortgages.filter((m) => !propertyIds.includes(m.propertyId)),
           propertyExpenses: d.propertyExpenses.filter((e) => !propertyIds.includes(e.propertyId)),
+          propertyRentPeriods: d.propertyRentPeriods.filter((r) => !propertyIds.includes(r.propertyId)),
           assetValuations: d.assetValuations.filter((v) => !assetIds.includes(v.assetId)),
           securityTransactions: d.securityTransactions.filter((t) => !groupIds.includes(t.assetGroupId)),
           securityValuations: d.securityValuations.filter((v) => !assetIds.includes(v.assetId)),
@@ -564,6 +705,7 @@ export const api = {
           propertyValuations: d.propertyValuations.filter((v) => !propertyIds.includes(v.propertyId)),
           propertyMortgages: d.propertyMortgages.filter((m) => !propertyIds.includes(m.propertyId)),
           propertyExpenses: d.propertyExpenses.filter((e) => !propertyIds.includes(e.propertyId)),
+          propertyRentPeriods: d.propertyRentPeriods.filter((r) => !propertyIds.includes(r.propertyId)),
           assetValuations: d.assetValuations.filter((v) => !assetIds.includes(v.assetId)),
           securityTransactions: d.securityTransactions.filter((t) => t.assetGroupId !== id),
           securityValuations: d.securityValuations.filter((v) => !assetIds.includes(v.assetId)),

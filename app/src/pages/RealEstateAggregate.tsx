@@ -46,7 +46,7 @@ function getPropertyListMetrics(p: Row) {
     liabilities,
     netValue,
     netValueClass,
-    rent: fmtMonthly(p.monthlyRent),
+    rent: fmtMonthly(p.effectiveMonthlyRent),
     mortgagePayment: fmtMonthly(p.monthlyMortgagePayment),
     cashflow: fmtMonthly(p.monthlyCashflow),
     cashflowClass,
@@ -73,7 +73,6 @@ const emptyForm = {
   description: '',
   notes: '',
   address: '',
-  monthlyRent: '',
   monthlyMortgagePayment: '',
 }
 
@@ -134,10 +133,8 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
   const validation = useMemo(() => {
     if (!form.name.trim()) return 'Property name is required.'
     const nr = (v: string) => (v.trim() === '' ? null : Number(v))
-    for (const key of ['monthlyRent', 'monthlyMortgagePayment'] as const) {
-      const n = nr(form[key])
-      if (n !== null && Number.isNaN(n)) return 'Monthly amounts must be numbers when provided.'
-    }
+    const n = nr(form.monthlyMortgagePayment)
+    if (n !== null && Number.isNaN(n)) return 'Mortgage payment must be a number when provided.'
     return null
   }, [form])
 
@@ -162,7 +159,6 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
         description: form.description.trim() || null,
         notes: form.notes.trim() || null,
         address: form.address.trim() || null,
-        monthlyRent: parseOptionalMoney(form.monthlyRent),
         monthlyMortgagePayment: parseOptionalMoney(form.monthlyMortgagePayment),
       })
       setBanner({ type: 'ok', text: 'Property created.' })
@@ -203,8 +199,8 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
           <p className="eyebrow">Real estate</p>
           <h1>{group.name}</h1>
           <p className="page-subtitle">
-            All properties in this group. Value and liabilities follow the latest valuation and mortgage rows. Monthly rent
-            and mortgage payment are stored per property; cashflow is rent minus mortgage payment.
+            All properties in this group. Value and liabilities follow the latest valuation and mortgage rows. Rent follows the
+            rent period that contains today (set on each property page). Cashflow is rent plus Hausgeld minus mortgage payment.
           </p>
         </div>
         <Link className="btn" to={assetGroupEditPath(portfolioId, assetGroupId)}>
@@ -254,10 +250,6 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
               <textarea rows={2} value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} />
             </label>
             <label>
-              Rent (monthly)
-              <input type="number" step="0.01" value={form.monthlyRent} onChange={(e) => setForm((f) => ({ ...f, monthlyRent: e.target.value }))} />
-            </label>
-            <label>
               Mortgage monthly payment
               <input
                 type="number"
@@ -277,7 +269,7 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
       )}
 
       {rows.length === 0 ? (
-        <div className="empty-state">No properties yet. Add one to track valuations and mortgage over time.</div>
+        <div className="empty-state">No properties yet. Add one to track valuations, mortgage, and rent periods over time.</div>
       ) : (
         <>
           <div className="re-property-cards" role="list" aria-label="Properties">

@@ -1926,6 +1926,105 @@ body {
   }
 }
 
+/* Rent periods (property page): cards on mobile, table on desktop */
+.rent-period-cards {
+  display: none;
+}
+
+.rent-period-table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.rent-period-table-wrap .table {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+}
+
+.rent-period-table-toolbar--desktop {
+  display: flex;
+}
+
+.rent-period-card {
+  margin: 0;
+  padding: 1rem 1.05rem;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+
+.rent-period-card:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.rent-period-card--selected {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary);
+}
+
+.rent-period-card__head {
+  margin-bottom: 0.65rem;
+}
+
+.rent-period-card__dates {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.rent-period-card__dl {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.4rem 0.75rem;
+  margin: 0;
+  align-items: baseline;
+}
+
+.rent-period-card__dt {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-subtle);
+}
+
+.rent-period-card__dd {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: right;
+  color: var(--color-text);
+  word-break: break-word;
+}
+
+.rent-period-card__actions {
+  margin-top: 0.75rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+@media (max-width: 767px) {
+  .rent-period-cards {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .rent-period-table-wrap,
+  .rent-period-table-toolbar--desktop {
+    display: none;
+  }
+}
+
 @media (max-width: 767px) {
   .property-table-scroll {
     max-height: min(95vh, 37.5rem);
