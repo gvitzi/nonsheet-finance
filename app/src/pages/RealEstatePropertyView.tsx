@@ -47,10 +47,18 @@ const mortgageEmpty = {
   outstandingBalance: '',
   currency: 'EUR',
   loanName: '',
-  principalMonthly: '',
+  paymentMonthly: '',
   interestMonthly: '',
 }
-const loanEmpty = { name: '', endDate: '', interestAnnualPercent: '' }
+const loanEmpty = {
+  name: '',
+  startDate: '',
+  endDate: '',
+  interestAnnualPercent: '',
+  originalLoanAmount: '',
+  amortizationAnnualPercent: '',
+  remainingDebtAfterFixedPeriod: '',
+}
 const rentPeriodEmpty = { startDate: '', endDate: '', rent: '', hausgeld: '0', tenantNames: '', notes: '' }
 
 type PropertyAccordionSection = 'valuations' | 'expenses' | 'mortgages' | 'rentPeriods'
@@ -288,11 +296,6 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
   }, [valuations])
 
   const legacyMortgageRows = useMemo(() => mortgages.filter((m) => !m.loanId), [mortgages])
-
-  const loanMortgageRows = useMemo(
-    () => (selectedLoanId ? mortgages.filter((m) => m.loanId === selectedLoanId) : []),
-    [mortgages, selectedLoanId],
-  )
 
   const mortgageFinanceRead = useMemo(() => {
     const now = new Date()
@@ -572,9 +575,19 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
 
   const lValidation = useMemo(() => {
     if (!lForm.name.trim()) return 'Loan name is required.'
+    if (!lForm.startDate) return 'Start date is required.'
     if (!lForm.endDate) return 'End date is required.'
+    if (lForm.startDate && lForm.endDate && lForm.endDate < lForm.startDate) return 'End date must be on or after start date.'
     const ir = lForm.interestAnnualPercent.trim()
     if (ir && Number.isNaN(Number(ir))) return 'Interest must be a number when provided.'
+    const oa = lForm.originalLoanAmount.trim()
+    if (oa && (Number.isNaN(Number(oa)) || Number(oa) < 0)) return 'Original loan amount must be a non-negative number when provided.'
+    const am = lForm.amortizationAnnualPercent.trim()
+    if (am && (Number.isNaN(Number(am)) || Number(am) < 0)) return 'Amortization rate must be a non-negative number when provided.'
+    const fd = lForm.remainingDebtAfterFixedPeriod.trim()
+    if (fd && (Number.isNaN(Number(fd)) || Number(fd) < 0)) {
+      return 'Remaining debt at end of fixed period must be a non-negative number when provided.'
+    }
     return null
   }, [lForm])
 
@@ -588,18 +601,25 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
     try {
       const ir = lForm.interestAnnualPercent.trim()
       const interestAnnualPercent = ir === '' ? null : Number(ir)
+      const oa = lForm.originalLoanAmount.trim()
+      const originalLoanAmount = oa === '' ? null : Number(oa)
+      const am = lForm.amortizationAnnualPercent.trim()
+      const amortizationAnnualPercent = am === '' ? null : Number(am)
+      const fd = lForm.remainingDebtAfterFixedPeriod.trim()
+      const remainingDebtAfterFixedPeriod = fd === '' ? null : Number(fd)
+      const loanPayload = {
+        name: lForm.name.trim(),
+        startDate: lForm.startDate,
+        endDate: lForm.endDate,
+        interestAnnualPercent,
+        originalLoanAmount,
+        amortizationAnnualPercent,
+        remainingDebtAfterFixedPeriod,
+      }
       if (loanEditing) {
-        await api.properties.updateLoan(propertyId, loanEditing.id, {
-          name: lForm.name.trim(),
-          endDate: lForm.endDate,
-          interestAnnualPercent,
-        })
+        await api.properties.updateLoan(propertyId, loanEditing.id, loanPayload)
       } else {
-        await api.properties.createLoan(propertyId, {
-          name: lForm.name.trim(),
-          endDate: lForm.endDate,
-          interestAnnualPercent,
-        })
+        await api.properties.createLoan(propertyId, loanPayload)
       }
       closeLoanModal()
       setBanner({ type: 'ok', text: loanEditing ? 'Loan updated.' : 'Loan added.' })
@@ -625,20 +645,24 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
   const mValidation = useMemo(() => {
     if (!mForm.date) return 'Date is required.'
     if (Number.isNaN(Number(mForm.outstandingBalance))) return 'Outstanding balance must be a number.'
-    const p = mForm.principalMonthly.trim()
-    if (p && Number.isNaN(Number(p))) return 'Principal monthly must be a number.'
-    const i = mForm.interestMonthly.trim()
-    if (i && Number.isNaN(Number(i))) return 'Interest monthly must be a number.'
+    const pay = mForm.paymentMonthly.trim()
+    const int = mForm.interestMonthly.trim()
+    if (pay && Number.isNaN(Number(pay))) return 'Monthly payment must be a number.'
+    if (int && Number.isNaN(Number(int))) return 'Interest monthly must be a number.'
+    const payN = pay === '' ? 0 : Number(pay)
+    const intN = int === '' ? 0 : Number(int)
+    if (payN < 0 || intN < 0) return 'Monthly payment and interest must be non-negative.'
+    if (intN > payN) return 'Interest cannot exceed the monthly payment.'
     return null
   }, [mForm])
 
-  const calculatedMortgageMonthly = useMemo(() => {
-    const p = parseFloat(mForm.principalMonthly)
-    const i = parseFloat(mForm.interestMonthly)
-    const pr = mForm.principalMonthly.trim() === '' || Number.isNaN(p) ? 0 : p
-    const ir = mForm.interestMonthly.trim() === '' || Number.isNaN(i) ? 0 : i
-    return pr + ir
-  }, [mForm.principalMonthly, mForm.interestMonthly])
+  const derivedMortgagePrincipalMonthly = useMemo(() => {
+    const pay = mForm.paymentMonthly.trim()
+    const int = mForm.interestMonthly.trim()
+    const payN = pay === '' || Number.isNaN(Number(pay)) ? 0 : Number(pay)
+    const intN = int === '' || Number.isNaN(Number(int)) ? 0 : Number(int)
+    return payN - intN
+  }, [mForm.paymentMonthly, mForm.interestMonthly])
 
   const saveMortgage = async () => {
     if (mValidation) {
@@ -654,9 +678,9 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
     try {
       const updating = Boolean(mEditing)
       const iso = new Date(mForm.date + 'T12:00:00').toISOString()
-      const principalMonthlyPayment =
-        mForm.principalMonthly.trim() === '' ? 0 : parseFloat(mForm.principalMonthly)
+      const payN = mForm.paymentMonthly.trim() === '' ? 0 : parseFloat(mForm.paymentMonthly)
       const interestMonthlyPayment = mForm.interestMonthly.trim() === '' ? 0 : parseFloat(mForm.interestMonthly)
+      const principalMonthlyPayment = payN - interestMonthlyPayment
       const body = {
         date: iso,
         outstandingBalance: parseFloat(mForm.outstandingBalance),
@@ -825,11 +849,6 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
               </label>
               <div className="span-2 property-details-section__fin-intro">
                 <h3 className="property-details-section__fin-title">Financial summary</h3>
-                <p className="page-subtitle property-details-section__fin-copy">
-                  Value follows the latest valuation. Mortgage debt sums the latest mark per loan (and any legacy marks without a
-                  loan). Rent and Hausgeld follow the rent period active today. Net cashflow uses the sum of principal + interest
-                  from the latest mark per loan when loans exist; otherwise the mortgage payment field below (EUR).
-                </p>
               </div>
               <label>
                 Value (latest valuation)
@@ -912,11 +931,6 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
 
             <div className="property-details-read__fin">
               <h3 className="property-details-section__fin-title">Financial summary</h3>
-              <p className="page-subtitle property-details-section__fin-copy">
-                Value follows the latest valuation. Mortgage debt sums the latest mark per loan (and legacy marks). Rent and Hausgeld
-                follow the rent period active today. Net cashflow uses per-loan latest principal + interest when available; otherwise
-                the stored mortgage payment (EUR).
-              </p>
               <div className="property-details-read__stats">
                 <div className="property-details-read__stat">
                   <div className="label">Latest valuation</div>
@@ -938,8 +952,29 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
                       {mortgageFinanceRead.perLoan.map(({ loan, slice }) => (
                         <li key={loan.id}>
                           <strong>{loan.name}</strong>
+                          {loan.startDate ? (
+                            <>
+                              {' · '}
+                              Start {new Date(loan.startDate + 'T12:00:00').toLocaleDateString()}
+                            </>
+                          ) : null}
                           {' · '}
                           End {new Date(loan.endDate + 'T12:00:00').toLocaleDateString()}
+                          {loan.originalLoanAmount != null && !Number.isNaN(loan.originalLoanAmount) ? (
+                            <>
+                              {' · '}
+                              Original {fmt(loan.originalLoanAmount, 'EUR')}
+                            </>
+                          ) : null}
+                          {loan.amortizationAnnualPercent != null && !Number.isNaN(loan.amortizationAnnualPercent) ? (
+                            <> · Amortization {loan.amortizationAnnualPercent}% p.a.</>
+                          ) : null}
+                          {loan.remainingDebtAfterFixedPeriod != null && !Number.isNaN(loan.remainingDebtAfterFixedPeriod) ? (
+                            <>
+                              {' · '}
+                              After fixed period {fmt(loan.remainingDebtAfterFixedPeriod, 'EUR')}
+                            </>
+                          ) : null}
                           {slice ? (
                             <>
                               {' · '}
@@ -972,28 +1007,30 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
                           })()}
                         </li>
                       ) : null}
-                      <li className="property-loan-summary-list__totals">
-                        <strong>All loans total</strong>
-                        {' · '}
-                        Debt {mortgageFinanceRead.totalDebtFormatted}
-                        {' · '}
-                        Payment{' '}
-                        {mortgageFinanceRead.totalsSameCurrency && mortgageFinanceRead.payCur
-                          ? fmt(mortgageFinanceRead.sumPayment, mortgageFinanceRead.payCur) + '/mo'
-                          : '—'}
-                        {' · '}
-                        Principal{' '}
-                        {mortgageFinanceRead.totalsSameCurrency && mortgageFinanceRead.payCur
-                          ? fmt(mortgageFinanceRead.sumPrincipal, mortgageFinanceRead.payCur) + '/mo'
-                          : '—'}
-                        {' · '}
-                        Interest{' '}
-                        {mortgageFinanceRead.totalsSameCurrency && mortgageFinanceRead.payCur
-                          ? fmt(mortgageFinanceRead.sumInterest, mortgageFinanceRead.payCur) + '/mo'
-                          : '—'}
-                        {' · '}
-                        End date —
-                      </li>
+                      {loans.length !== 1 || legacyMortgageRows.length > 0 ? (
+                        <li className="property-loan-summary-list__totals">
+                          <strong>All loans total</strong>
+                          {' · '}
+                          Debt {mortgageFinanceRead.totalDebtFormatted}
+                          {' · '}
+                          Payment{' '}
+                          {mortgageFinanceRead.totalsSameCurrency && mortgageFinanceRead.payCur
+                            ? fmt(mortgageFinanceRead.sumPayment, mortgageFinanceRead.payCur) + '/mo'
+                            : '—'}
+                          {' · '}
+                          Principal{' '}
+                          {mortgageFinanceRead.totalsSameCurrency && mortgageFinanceRead.payCur
+                            ? fmt(mortgageFinanceRead.sumPrincipal, mortgageFinanceRead.payCur) + '/mo'
+                            : '—'}
+                          {' · '}
+                          Interest{' '}
+                          {mortgageFinanceRead.totalsSameCurrency && mortgageFinanceRead.payCur
+                            ? fmt(mortgageFinanceRead.sumInterest, mortgageFinanceRead.payCur) + '/mo'
+                            : '—'}
+                          {' · '}
+                          End date —
+                        </li>
+                      ) : null}
                     </ul>
                   )}
                 </div>
@@ -1216,12 +1253,6 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
             <span className="property-accordion__title">Loans & mortgage history</span>
           </summary>
           <div className="property-accordion__body stack">
-            <p className="page-subtitle">
-              Add a loan (name, end date, interest rate), then record dated marks: outstanding balance, principal and interest
-              portions of the monthly payment. The form shows calculated total payment (principal + interest).
-            </p>
-
-            <h3 className="property-subsection-title">Loans</h3>
             <div className="property-table-toolbar">
               <button
                 className="btn btn-primary"
@@ -1245,10 +1276,23 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
                       setLoanEditing(L)
                       setLForm({
                         name: L.name,
+                        startDate: L.startDate ? dateInputFromIso(L.startDate) : '',
                         endDate: dateInputFromIso(L.endDate),
                         interestAnnualPercent:
                           L.interestAnnualPercent != null && !Number.isNaN(L.interestAnnualPercent)
                             ? String(L.interestAnnualPercent)
+                            : '',
+                        originalLoanAmount:
+                          L.originalLoanAmount != null && !Number.isNaN(L.originalLoanAmount)
+                            ? String(L.originalLoanAmount)
+                            : '',
+                        amortizationAnnualPercent:
+                          L.amortizationAnnualPercent != null && !Number.isNaN(L.amortizationAnnualPercent)
+                            ? String(L.amortizationAnnualPercent)
+                            : '',
+                        remainingDebtAfterFixedPeriod:
+                          L.remainingDebtAfterFixedPeriod != null && !Number.isNaN(L.remainingDebtAfterFixedPeriod)
+                            ? String(L.remainingDebtAfterFixedPeriod)
                             : '',
                       })
                       setLoanModalOpen(true)
@@ -1265,119 +1309,305 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
             {loans.length === 0 ? (
               <div className="empty-state">No loans yet. Add a loan to attach mortgage history, or use legacy marks below.</div>
             ) : (
-              <ul className="property-loan-pick-list">
-                {loans.map((L) => (
-                  <li key={L.id}>
-                    <button
-                      type="button"
-                      className={`btn btn-sm${selectedLoanId === L.id ? ' btn-primary' : ''}`}
-                      onClick={() => setSelectedLoanId(L.id)}
+              <div className="property-loan-accordion-list">
+                {loans.map((L) => {
+                  const slice = mortgageFinanceRead.perLoan.find((x) => x.loan.id === L.id)?.slice ?? null
+                  const rowsForLoan = mortgages.filter((m) => m.loanId === L.id)
+                  const debtLabel =
+                    slice != null ? fmt(slice.outstandingBalance, slice.currency) : '—'
+                  const isOpen = selectedLoanId === L.id
+                  return (
+                    <details
+                      key={L.id}
+                      className="property-accordion property-loan-accordion"
+                      open={isOpen}
+                      onToggle={(e) => {
+                        const el = e.currentTarget
+                        if (el.open) {
+                          setSelectedLoanId(L.id)
+                          setSelectedMortgageId(null)
+                        } else {
+                          setSelectedLoanId((prev) => (prev === L.id ? null : prev))
+                        }
+                      }}
                     >
-                      {L.name}
-                    </button>
-                    <span className="property-loan-pick-meta">
-                      {' '}
-                      · ends {new Date(L.endDate + 'T12:00:00').toLocaleDateString()}
-                      {L.interestAnnualPercent != null ? ` · ${L.interestAnnualPercent}% p.a.` : ''}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+                      <summary className="property-accordion__summary property-loan-accordion__summary">
+                        <span className="property-loan-accordion__head">
+                          <span className="property-accordion__title">{L.name}</span>
+                          <span className="property-loan-accordion__debt" title="Latest outstanding (debt)">
+                            {debtLabel}
+                          </span>
+                        </span>
+                      </summary>
+                      <div className="property-accordion__body stack">
+                        <div className="property-loan-readonly">
+                          <div className="property-loan-readonly__row">
+                            <span className="property-loan-readonly__label">Start</span>
+                            <span className="property-loan-readonly__value">
+                              {L.startDate ? new Date(L.startDate + 'T12:00:00').toLocaleDateString() : '—'}
+                            </span>
+                          </div>
+                          <div className="property-loan-readonly__row">
+                            <span className="property-loan-readonly__label">End</span>
+                            <span className="property-loan-readonly__value">
+                              {new Date(L.endDate + 'T12:00:00').toLocaleDateString()}
+                            </span>
+                          </div>
+                          <div className="property-loan-readonly__row">
+                            <span className="property-loan-readonly__label">Interest</span>
+                            <span className="property-loan-readonly__value">
+                              {L.interestAnnualPercent != null && !Number.isNaN(L.interestAnnualPercent)
+                                ? `${L.interestAnnualPercent}% p.a.`
+                                : '—'}
+                            </span>
+                          </div>
+                          <div className="property-loan-readonly__row">
+                            <span className="property-loan-readonly__label">Original amount</span>
+                            <span className="property-loan-readonly__value">
+                              {L.originalLoanAmount != null && !Number.isNaN(L.originalLoanAmount)
+                                ? fmt(L.originalLoanAmount, 'EUR')
+                                : '—'}
+                            </span>
+                          </div>
+                          <div className="property-loan-readonly__row">
+                            <span className="property-loan-readonly__label">Amortization</span>
+                            <span className="property-loan-readonly__value">
+                              {L.amortizationAnnualPercent != null && !Number.isNaN(L.amortizationAnnualPercent)
+                                ? `${L.amortizationAnnualPercent}% p.a.`
+                                : '—'}
+                            </span>
+                          </div>
+                          <div className="property-loan-readonly__row">
+                            <span className="property-loan-readonly__label">Remaining after fixed period</span>
+                            <span className="property-loan-readonly__value">
+                              {L.remainingDebtAfterFixedPeriod != null && !Number.isNaN(L.remainingDebtAfterFixedPeriod)
+                                ? fmt(L.remainingDebtAfterFixedPeriod, 'EUR')
+                                : '—'}
+                            </span>
+                          </div>
+                          <div className="property-loan-readonly__row">
+                            <span className="property-loan-readonly__label">Latest debt (from marks)</span>
+                            <span className="property-loan-readonly__value property-loan-readonly__value--emph">
+                              {debtLabel}
+                              {slice ? (
+                                <span className="property-loan-readonly__asof">
+                                  {' '}
+                                  as of {slice.markDate.toLocaleDateString()}
+                                </span>
+                              ) : null}
+                            </span>
+                          </div>
+                          {slice ? (
+                            <div className="property-loan-readonly__row">
+                              <span className="property-loan-readonly__label">Latest payment (P + I)</span>
+                              <span className="property-loan-readonly__value">
+                                {fmt(slice.principalMonthly + slice.interestMonthly, slice.currency)}
+                                /mo (P {fmt(slice.principalMonthly, slice.currency)} + I{' '}
+                                {fmt(slice.interestMonthly, slice.currency)})
+                              </span>
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <h4 className="property-subsection-title property-loan-marks-title">Mortgage marks</h4>
+                        <div className="property-table-toolbar">
+                          <button
+                            className="btn btn-primary"
+                            type="button"
+                            onClick={() => {
+                              setMEditing(null)
+                              setMForm(mortgageEmpty)
+                              setSelectedMortgageId(null)
+                              setMortgageModalOpen(true)
+                            }}
+                          >
+                            Add mark
+                          </button>
+                          {selectedMortgageId &&
+                          rowsForLoan.some((x) => x.id === selectedMortgageId) ? (
+                            <div className="property-table-toolbar__actions">
+                              <button
+                                className="btn btn-sm"
+                                type="button"
+                                onClick={() => {
+                                  const r = rowsForLoan.find((x) => x.id === selectedMortgageId)
+                                  if (!r) return
+                                  setMEditing(r)
+                                  setMForm({
+                                    date: dateInputFromIso(r.date),
+                                    outstandingBalance: String(r.outstandingBalance),
+                                    currency: r.currency,
+                                    loanName: r.loanName ?? '',
+                                    paymentMonthly: String(
+                                      (r.principalMonthlyPayment ?? 0) + (r.interestMonthlyPayment ?? 0),
+                                    ),
+                                    interestMonthly:
+                                      r.interestMonthlyPayment != null && !Number.isNaN(r.interestMonthlyPayment)
+                                        ? String(r.interestMonthlyPayment)
+                                        : '',
+                                  })
+                                  setMortgageModalOpen(true)
+                                }}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                className="btn btn-sm btn-danger"
+                                type="button"
+                                onClick={() => void delMortgage(selectedMortgageId)}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+
+                        {rowsForLoan.length === 0 ? (
+                          <div className="empty-state">No marks for this loan yet.</div>
+                        ) : (
+                          <div className="property-table-scroll">
+                            <table className="table">
+                              <thead>
+                                <tr>
+                                  <th>Date</th>
+                                  <th>Outstanding (debt)</th>
+                                  <th>Principal / mo</th>
+                                  <th>Interest / mo</th>
+                                  <th>Payment / mo</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {rowsForLoan.map((r) => (
+                                  <tr
+                                    key={r.id}
+                                    className={`property-table-row--selectable${selectedMortgageId === r.id ? ' property-table-row--selected' : ''}`}
+                                    tabIndex={0}
+                                    aria-selected={selectedMortgageId === r.id}
+                                    onClick={() => setSelectedMortgageId((prev) => (prev === r.id ? null : r.id))}
+                                    onKeyDown={(e) => {
+                                      if (e.key !== 'Enter' && e.key !== ' ') return
+                                      e.preventDefault()
+                                      setSelectedMortgageId((prev) => (prev === r.id ? null : r.id))
+                                    }}
+                                  >
+                                    <td>{new Date(r.date).toLocaleDateString()}</td>
+                                    <td className="negative">{fmt(r.outstandingBalance, r.currency)}</td>
+                                    <td>{fmt(r.principalMonthlyPayment ?? 0, r.currency)}</td>
+                                    <td>{fmt(r.interestMonthlyPayment ?? 0, r.currency)}</td>
+                                    <td>
+                                      {fmt(
+                                        (r.principalMonthlyPayment ?? 0) + (r.interestMonthlyPayment ?? 0),
+                                        r.currency,
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    </details>
+                  )
+                })}
+              </div>
             )}
 
-            <h3 className="property-subsection-title">Mortgage marks {selectedLoanId ? `(${loans.find((l) => l.id === selectedLoanId)?.name ?? ''})` : ''}</h3>
-            <div className="property-table-toolbar">
-              <button
-                className="btn btn-primary"
-                type="button"
-                disabled={loans.length > 0 && !selectedLoanId}
-                onClick={() => {
-                  if (loans.length > 0 && !selectedLoanId) return
-                  setMEditing(null)
-                  setMForm(mortgageEmpty)
-                  setSelectedMortgageId(null)
-                  setMortgageModalOpen(true)
-                }}
-              >
-                Add mark
-              </button>
-              {selectedMortgageId ? (
-                <div className="property-table-toolbar__actions">
+            {loans.length === 0 && legacyMortgageRows.length > 0 ? (
+              <>
+                <h3 className="property-subsection-title">Mortgage marks (legacy)</h3>
+                <div className="property-table-toolbar">
                   <button
-                    className="btn btn-sm"
+                    className="btn btn-primary"
                     type="button"
                     onClick={() => {
-                      const pool = loans.length > 0 ? loanMortgageRows : legacyMortgageRows
-                      const r = pool.find((x) => x.id === selectedMortgageId)
-                      if (!r) return
-                      setMEditing(r)
-                      setMForm({
-                        date: dateInputFromIso(r.date),
-                        outstandingBalance: String(r.outstandingBalance),
-                        currency: r.currency,
-                        loanName: r.loanName ?? '',
-                        principalMonthly:
-                          r.principalMonthlyPayment != null && !Number.isNaN(r.principalMonthlyPayment)
-                            ? String(r.principalMonthlyPayment)
-                            : '',
-                        interestMonthly:
-                          r.interestMonthlyPayment != null && !Number.isNaN(r.interestMonthlyPayment)
-                            ? String(r.interestMonthlyPayment)
-                            : '',
-                      })
+                      setMEditing(null)
+                      setMForm(mortgageEmpty)
+                      setSelectedMortgageId(null)
                       setMortgageModalOpen(true)
                     }}
                   >
-                    Edit
+                    Add mark
                   </button>
-                  <button className="btn btn-sm btn-danger" type="button" onClick={() => void delMortgage(selectedMortgageId)}>
-                    Delete
-                  </button>
-                </div>
-              ) : null}
-            </div>
-
-            {loans.length > 0 && !selectedLoanId ? (
-              <div className="empty-state">Select a loan to view or add marks.</div>
-            ) : loanMortgageRows.length === 0 && !(loans.length === 0 && legacyMortgageRows.length > 0) ? (
-              <div className="empty-state">No marks for this loan yet.</div>
-            ) : (
-              <div className="property-table-scroll">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Outstanding (debt)</th>
-                      <th>Principal / mo</th>
-                      <th>Interest / mo</th>
-                      <th>Payment / mo</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(loans.length > 0 ? loanMortgageRows : legacyMortgageRows).map((r) => (
-                      <tr
-                        key={r.id}
-                        className={`property-table-row--selectable${selectedMortgageId === r.id ? ' property-table-row--selected' : ''}`}
-                        tabIndex={0}
-                        aria-selected={selectedMortgageId === r.id}
-                        onClick={() => setSelectedMortgageId((prev) => (prev === r.id ? null : r.id))}
-                        onKeyDown={(e) => {
-                          if (e.key !== 'Enter' && e.key !== ' ') return
-                          e.preventDefault()
-                          setSelectedMortgageId((prev) => (prev === r.id ? null : r.id))
+                  {selectedMortgageId ? (
+                    <div className="property-table-toolbar__actions">
+                      <button
+                        className="btn btn-sm"
+                        type="button"
+                        onClick={() => {
+                          const r = legacyMortgageRows.find((x) => x.id === selectedMortgageId)
+                          if (!r) return
+                          setMEditing(r)
+                          setMForm({
+                            date: dateInputFromIso(r.date),
+                            outstandingBalance: String(r.outstandingBalance),
+                            currency: r.currency,
+                            loanName: r.loanName ?? '',
+                            paymentMonthly: String(
+                              (r.principalMonthlyPayment ?? 0) + (r.interestMonthlyPayment ?? 0),
+                            ),
+                            interestMonthly:
+                              r.interestMonthlyPayment != null && !Number.isNaN(r.interestMonthlyPayment)
+                                ? String(r.interestMonthlyPayment)
+                                : '',
+                          })
+                          setMortgageModalOpen(true)
                         }}
                       >
-                        <td>{new Date(r.date).toLocaleDateString()}</td>
-                        <td className="negative">{fmt(r.outstandingBalance, r.currency)}</td>
-                        <td>{fmt(r.principalMonthlyPayment ?? 0, r.currency)}</td>
-                        <td>{fmt(r.interestMonthlyPayment ?? 0, r.currency)}</td>
-                        <td>{fmt((r.principalMonthlyPayment ?? 0) + (r.interestMonthlyPayment ?? 0), r.currency)}</td>
+                        Edit
+                      </button>
+                      <button className="btn btn-sm btn-danger" type="button" onClick={() => void delMortgage(selectedMortgageId)}>
+                        Delete
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="property-table-scroll">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Outstanding (debt)</th>
+                        <th>Principal / mo</th>
+                        <th>Interest / mo</th>
+                        <th>Payment / mo</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                    </thead>
+                    <tbody>
+                      {legacyMortgageRows.map((r) => (
+                        <tr
+                          key={r.id}
+                          className={`property-table-row--selectable${selectedMortgageId === r.id ? ' property-table-row--selected' : ''}`}
+                          tabIndex={0}
+                          aria-selected={selectedMortgageId === r.id}
+                          onClick={() => setSelectedMortgageId((prev) => (prev === r.id ? null : r.id))}
+                          onKeyDown={(e) => {
+                            if (e.key !== 'Enter' && e.key !== ' ') return
+                            e.preventDefault()
+                            setSelectedMortgageId((prev) => (prev === r.id ? null : r.id))
+                          }}
+                        >
+                          <td>{new Date(r.date).toLocaleDateString()}</td>
+                          <td className="negative">{fmt(r.outstandingBalance, r.currency)}</td>
+                          <td>{fmt(r.principalMonthlyPayment ?? 0, r.currency)}</td>
+                          <td>{fmt(r.interestMonthlyPayment ?? 0, r.currency)}</td>
+                          <td>
+                            {fmt((r.principalMonthlyPayment ?? 0) + (r.interestMonthlyPayment ?? 0), r.currency)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : null}
+
+            {loans.length === 0 && legacyMortgageRows.length === 0 ? (
+              <>
+                <h3 className="property-subsection-title">Mortgage marks</h3>
+                <div className="empty-state">Add a loan above, or legacy marks will appear here when present.</div>
+              </>
+            ) : null}
 
             {loans.length > 0 && legacyMortgageRows.length > 0 ? (
               <>
@@ -1714,27 +1944,29 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
                 </label>
               ) : null}
               <label>
-                Principal monthly payment
+                Monthly payment
                 <input
                   type="number"
                   step="0.01"
-                  value={mForm.principalMonthly}
-                  onChange={(e) => setMForm((f) => ({ ...f, principalMonthly: e.target.value }))}
+                  min="0"
+                  value={mForm.paymentMonthly}
+                  onChange={(e) => setMForm((f) => ({ ...f, paymentMonthly: e.target.value }))}
                 />
               </label>
               <label>
-                Interest monthly payment
+                Interest monthly
                 <input
                   type="number"
                   step="0.01"
+                  min="0"
                   value={mForm.interestMonthly}
                   onChange={(e) => setMForm((f) => ({ ...f, interestMonthly: e.target.value }))}
                 />
               </label>
               <div className="span-2">
-                <div className="label">Calculated monthly payment</div>
+                <div className="label">Calculated principal monthly</div>
                 <div className="property-details-read__stat-value" style={{ fontSize: '1rem' }}>
-                  {fmt(calculatedMortgageMonthly, mForm.currency.trim().toUpperCase() || 'EUR')}
+                  {fmt(derivedMortgagePrincipalMonthly, mForm.currency.trim().toUpperCase() || 'EUR')}
                 </div>
               </div>
             </div>
@@ -1772,8 +2004,45 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
                 <input value={lForm.name} onChange={(e) => setLForm((f) => ({ ...f, name: e.target.value }))} />
               </label>
               <label>
+                Start date *
+                <input type="date" value={lForm.startDate} onChange={(e) => setLForm((f) => ({ ...f, startDate: e.target.value }))} />
+              </label>
+              <label>
                 End date *
                 <input type="date" value={lForm.endDate} onChange={(e) => setLForm((f) => ({ ...f, endDate: e.target.value }))} />
+              </label>
+              <label>
+                Original loan amount (optional)
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={lForm.originalLoanAmount}
+                  onChange={(e) => setLForm((f) => ({ ...f, originalLoanAmount: e.target.value }))}
+                  placeholder="Principal at origination"
+                />
+              </label>
+              <label>
+                Amortization rate (% p.a. of principal, optional)
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={lForm.amortizationAnnualPercent}
+                  onChange={(e) => setLForm((f) => ({ ...f, amortizationAnnualPercent: e.target.value }))}
+                  placeholder="e.g. 2"
+                />
+              </label>
+              <label className="span-2">
+                Remaining debt at end of fixed-rate period (optional)
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={lForm.remainingDebtAfterFixedPeriod}
+                  onChange={(e) => setLForm((f) => ({ ...f, remainingDebtAfterFixedPeriod: e.target.value }))}
+                  placeholder="Expected balance when fixed interest ends"
+                />
               </label>
               <label>
                 Interest (% p.a., optional)

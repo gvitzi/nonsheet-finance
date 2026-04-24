@@ -79,8 +79,13 @@ export interface PropertyLoan {
   id: string
   propertyId: string
   name: string
+  /** Loan start (YYYY-MM-DD); null if not set. */
+  startDate: string | null
   endDate: string
   interestAnnualPercent: number | null
+  originalLoanAmount: number | null
+  amortizationAnnualPercent: number | null
+  remainingDebtAfterFixedPeriod: number | null
   property?: { id: string; name: string }
   createdAt: string
   updatedAt: string
@@ -301,6 +306,8 @@ export interface Settings {
   /** Default currency pre-selected on the Dashboard; when omitted, use `baseCurrency`. */
   displayCurrency?: string
   staleAssetWarningMonths?: number
+  /** Months ahead (and past maturities) for mortgage loan end-date notifications; default 3. */
+  mortgageLoanEndWarningMonths?: number
   createdAt: string
   updatedAt: string
 }

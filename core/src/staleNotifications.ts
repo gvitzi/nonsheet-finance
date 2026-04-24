@@ -70,6 +70,8 @@ function latestAsOfDateMs(rows: { date: string }[]): number | null {
  * - **General assets**: latest **asset valuation** `date` (or record dates if none yet) vs threshold.
  * - **Real estate**: separate checks — latest **valuation** `date` and latest **mortgage** `date` must
  *   each fall within the last `settings.staleAssetWarningMonths` (default 3); missing rows count as stale.
+ * - **Loan end date**: each **property loan** `endDate` (not 2090+) triggers a warning when the term has
+ *   passed or ends on or before `settings.mortgageLoanEndWarningMonths` (default 3) from today.
  */
 export function computeStaleDataNotifications(doc: WealthDocument, nowInput?: Date): WealthAppNotification[] {
   const now = nowInput ?? new Date()
@@ -167,6 +169,36 @@ export function computeStaleDataNotifications(doc: WealthDocument, nowInput?: Da
         out.push({
           id: `stale-property-${prop.id}-mortgage`,
           message: `Real estate ${prop.name}: add a mortgage balance mark with as-of date within the last ${months} month${months === 1 ? '' : 's'}. Latest mortgage as of: ${when}.`,
+          severity: 'warning',
+          action: openProperty,
+        })
+      }
+    }
+
+    const loanEndWarnMonths = doc.settings.mortgageLoanEndWarningMonths ?? 3
+    const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    const horizonEnd = new Date(now.getFullYear(), now.getMonth() + loanEndWarnMonths, now.getDate(), 23, 59, 59, 999).getTime()
+
+    for (const loan of loans) {
+      const ymd = typeof loan.endDate === 'string' ? loan.endDate.trim().slice(0, 10) : ''
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue
+      if (ymd >= '2090-01-01') continue
+      const loanEndEod = new Date(ymd + 'T23:59:59').getTime()
+      if (Number.isNaN(loanEndEod)) continue
+
+      const endLabel = new Date(ymd + 'T12:00:00').toLocaleDateString(undefined, { dateStyle: 'medium' })
+
+      if (loanEndEod < startToday) {
+        out.push({
+          id: `loan-end-${prop.id}-${loan.id}`,
+          message: `Real estate ${prop.name} · loan ${loan.name}: loan term ended on ${endLabel}.`,
+          severity: 'warning',
+          action: openProperty,
+        })
+      } else if (loanEndEod <= horizonEnd) {
+        out.push({
+          id: `loan-end-${prop.id}-${loan.id}`,
+          message: `Real estate ${prop.name} · loan ${loan.name}: loan term ends on ${endLabel} (within ${loanEndWarnMonths} month${loanEndWarnMonths === 1 ? '' : 's'}).`,
           severity: 'warning',
           action: openProperty,
         })

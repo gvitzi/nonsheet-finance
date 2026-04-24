@@ -25,6 +25,7 @@ export default function SettingsPage() {
   const [baseCurrency, setBaseCurrency] = useState('EUR')
   const [displayCurrency, setDisplayCurrency] = useState('EUR')
   const [staleMonths, setStaleMonths] = useState('3')
+  const [loanEndWarnMonths, setLoanEndWarnMonths] = useState('3')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -39,8 +40,12 @@ export default function SettingsPage() {
     if (st === '') return 'Enter number of months for stale data reminder (1–120).'
     const m = parseInt(st, 10)
     if (Number.isNaN(m) || m < 1 || m > 120) return 'Stale reminder must be a whole number from 1 to 120 months.'
+    const le = loanEndWarnMonths.trim()
+    if (le === '') return 'Enter number of months for mortgage loan end reminder (1–120).'
+    const lm = parseInt(le, 10)
+    if (Number.isNaN(lm) || lm < 1 || lm > 120) return 'Mortgage loan end reminder must be a whole number from 1 to 120 months.'
     return null
-  }, [baseCurrency, displayCurrency, staleMonths])
+  }, [baseCurrency, displayCurrency, staleMonths, loanEndWarnMonths])
 
   useEffect(() => {
     api.settings
@@ -50,6 +55,7 @@ export default function SettingsPage() {
         setBaseCurrency(data.baseCurrency)
         setDisplayCurrency((data.displayCurrency ?? data.baseCurrency).trim().toUpperCase() || data.baseCurrency)
         setStaleMonths(String(data.staleAssetWarningMonths ?? 3))
+        setLoanEndWarnMonths(String(data.mortgageLoanEndWarningMonths ?? 3))
       })
       .catch((e: unknown) => setError(getFriendlyError(e, 'Failed to load settings.')))
       .finally(() => setLoading(false))
@@ -72,11 +78,13 @@ export default function SettingsPage() {
         baseCurrency: base,
         displayCurrency: disp,
         staleAssetWarningMonths: parseInt(staleMonths.trim(), 10),
+        mortgageLoanEndWarningMonths: parseInt(loanEndWarnMonths.trim(), 10),
       })
       setSettings(updated)
       setBaseCurrency(updated.baseCurrency)
       setDisplayCurrency((updated.displayCurrency ?? updated.baseCurrency).trim().toUpperCase() || updated.baseCurrency)
       setStaleMonths(String(updated.staleAssetWarningMonths ?? 3))
+      setLoanEndWarnMonths(String(updated.mortgageLoanEndWarningMonths ?? 3))
       setSuccess('Settings saved.')
     } catch (e: unknown) {
       setError(getFriendlyError(e, 'Failed to save settings.'))
@@ -151,10 +159,11 @@ export default function SettingsPage() {
       <div className="panel settings-panel">
         <h2>Notifications</h2>
         <p className="page-subtitle" style={{ marginTop: 0 }}>
-          The title bar bell lists unsaved changes and stale data. For each real-estate property you get separate checks:
-          the latest <strong>valuation as-of date</strong> and (when you track a loan) the latest <strong>mortgage as-of
-          date</strong> must fall within the window below. General non-securities assets use their latest valuation as-of
-          date.
+          The title bar bell lists unsaved changes, stale marks, and upcoming or past mortgage loan end dates. For each
+          real-estate property you get separate checks: the latest <strong>valuation as-of date</strong> and (when you
+          track a loan) the latest <strong>mortgage as-of date</strong> must fall within the stale window below. General
+          non-securities assets use their latest valuation as-of date. Each loan’s <strong>end date</strong> (contract /
+          term end) is compared to the second window below.
         </p>
         <div className="form-grid settings-grid">
           <label className="span-2">
@@ -165,6 +174,16 @@ export default function SettingsPage() {
               onChange={(e) => setStaleMonths(e.target.value.replace(/[^\d]/g, ''))}
               placeholder="3"
               title="Valuation and mortgage marks use their as-of date field. Range 1–120; default 3. Mortgage reminders apply when there are mortgage rows or a monthly mortgage payment is set."
+            />
+          </label>
+          <label className="span-2">
+            Notify when a mortgage loan term ends within (months)
+            <input
+              inputMode="numeric"
+              value={loanEndWarnMonths}
+              onChange={(e) => setLoanEndWarnMonths(e.target.value.replace(/[^\d]/g, ''))}
+              placeholder="3"
+              title="Uses each property loan’s end date. You are notified if the term has already passed or ends on or before this many months from today. Placeholder end dates (2090 and later) are ignored. Range 1–120; default 3."
             />
           </label>
         </div>

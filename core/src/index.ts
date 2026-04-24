@@ -70,6 +70,8 @@ export interface SettingDto extends BaseEntity {
   displayCurrency?: string
   /** Months without valuation/mortgage or asset marks before title notifications (default 3). */
   staleAssetWarningMonths?: number
+  /** Months ahead (and past maturities) for mortgage loan end-date title notifications (default 3). */
+  mortgageLoanEndWarningMonths?: number
 }
 
 export * from './document.js'

@@ -106,10 +106,18 @@ export type PropertyLoanRecord = {
   id: string
   propertyId: string
   name: string
+  /** Loan start / disbursement (YYYY-MM-DD); null if unknown (legacy). */
+  startDate: string | null
   /** Loan maturity / end date (YYYY-MM-DD). */
   endDate: string
   /** Nominal annual interest rate in percent, e.g. 3.5 for 3.5% p.a.; null when unknown. */
   interestAnnualPercent: number | null
+  /** Original principal when the loan was taken out; null when unknown. */
+  originalLoanAmount: number | null
+  /** Initial amortization as nominal % p.a. of original principal (e.g. German Tilgung); null when unknown. */
+  amortizationAnnualPercent: number | null
+  /** Expected remaining debt at the end of the fixed-rate period; null when unknown. */
+  remainingDebtAfterFixedPeriod: number | null
   createdAt: string
   updatedAt: string
 }
@@ -210,6 +218,11 @@ export type SettingsRecord = {
   displayCurrency?: string
   /** Months without updates before general / real-estate items appear in notifications (default 3). */
   staleAssetWarningMonths?: number
+  /**
+   * How many months ahead (and any already-passed end dates) trigger a title-bar warning for each
+   * property loan `endDate` (default 3). Placeholder end dates (2090 and later) are ignored.
+   */
+  mortgageLoanEndWarningMonths?: number
   createdAt: string
   updatedAt: string
 }
@@ -298,6 +311,11 @@ function parseSettings(o: unknown): SettingsRecord {
   if (typeof rawMonths === 'number' && !Number.isNaN(rawMonths)) {
     staleAssetWarningMonths = clampStaleAssetMonths(rawMonths)
   }
+  const rawLoanEnd = o.mortgageLoanEndWarningMonths
+  let mortgageLoanEndWarningMonths: number | undefined
+  if (typeof rawLoanEnd === 'number' && !Number.isNaN(rawLoanEnd)) {
+    mortgageLoanEndWarningMonths = clampStaleAssetMonths(rawLoanEnd)
+  }
   const baseCurrency = reqStr(o, 'baseCurrency').trim().toUpperCase()
   const rawDisplay = optStr(o, 'displayCurrency')
   let displayCurrency: string | undefined
@@ -310,6 +328,7 @@ function parseSettings(o: unknown): SettingsRecord {
     baseCurrency,
     ...(displayCurrency !== undefined ? { displayCurrency } : {}),
     ...(staleAssetWarningMonths !== undefined ? { staleAssetWarningMonths } : {}),
+    ...(mortgageLoanEndWarningMonths !== undefined ? { mortgageLoanEndWarningMonths } : {}),
     createdAt: reqStr(o, 'createdAt'),
     updatedAt: reqStr(o, 'updatedAt'),
   }
@@ -414,6 +433,22 @@ function parseNumOrZero(o: Record<string, unknown>, k: string): number {
   return v
 }
 
+function parseOptionalLoanPercent(raw: unknown, field: string): number | null {
+  if (raw === undefined || raw === null) return null
+  if (typeof raw !== 'number' || Number.isNaN(raw)) {
+    throw new WealthDocumentParseError(`propertyLoan.${field} must be a number or null`)
+  }
+  return raw
+}
+
+function parseOptionalLoanAmount(raw: unknown, field: string): number | null {
+  if (raw === undefined || raw === null) return null
+  if (typeof raw !== 'number' || Number.isNaN(raw)) {
+    throw new WealthDocumentParseError(`propertyLoan.${field} must be a number or null`)
+  }
+  return raw
+}
+
 function parsePropertyLoan(o: unknown): PropertyLoanRecord {
   if (!isObj(o)) throw new WealthDocumentParseError('propertyLoan item')
   const interestRaw = o.interestAnnualPercent
@@ -424,12 +459,22 @@ function parsePropertyLoan(o: unknown): PropertyLoanRecord {
     }
     interestAnnualPercent = interestRaw
   }
+  const startRaw = optStr(o, 'startDate')
+  const startDate =
+    startRaw != null && String(startRaw).trim() !== '' ? String(startRaw).trim().slice(0, 10) : null
   return {
     id: reqStr(o, 'id'),
     propertyId: reqStr(o, 'propertyId'),
     name: reqStr(o, 'name'),
+    startDate,
     endDate: typeof o.endDate === 'string' ? o.endDate.slice(0, 10) : reqStr(o, 'endDate'),
     interestAnnualPercent,
+    originalLoanAmount: parseOptionalLoanAmount(o.originalLoanAmount, 'originalLoanAmount'),
+    amortizationAnnualPercent: parseOptionalLoanPercent(o.amortizationAnnualPercent, 'amortizationAnnualPercent'),
+    remainingDebtAfterFixedPeriod: parseOptionalLoanAmount(
+      o.remainingDebtAfterFixedPeriod,
+      'remainingDebtAfterFixedPeriod',
+    ),
     createdAt: reqStr(o, 'createdAt'),
     updatedAt: reqStr(o, 'updatedAt'),
   }
@@ -815,6 +860,7 @@ export function createEmptyWealthDocument(): WealthDocument {
       id: sid,
       baseCurrency: 'EUR',
       staleAssetWarningMonths: 3,
+      mortgageLoanEndWarningMonths: 3,
       createdAt,
       updatedAt,
     },
