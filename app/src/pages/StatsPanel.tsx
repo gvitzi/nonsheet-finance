@@ -136,7 +136,6 @@ export default function StatsPanel({ assetGroupId, displayCurrency, items }: Pro
                       )
                     }}
                   />
-                  <Legend />
                 </PieChart>
               </ResponsiveContainer>
             )}

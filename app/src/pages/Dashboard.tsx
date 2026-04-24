@@ -566,7 +566,6 @@ export default function Dashboard() {
                         )
                       }}
                     />
-                    <Legend />
                   </PieChart>
                 </ResponsiveContainer>
                 {omittedFromPieCount > 0 ? (
