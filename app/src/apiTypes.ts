@@ -49,6 +49,7 @@ export interface Property {
   name: string
   description?: string | null
   notes?: string | null
+  address?: string | null
   monthlyRent?: number | null
   monthlyMortgagePayment?: number | null
   monthlyCashflow?: number | null

@@ -83,6 +83,7 @@ export type PropertyRecord = {
   name: string
   description?: string | null
   notes?: string | null
+  address?: string | null
   monthlyRent?: number | null
   monthlyMortgagePayment?: number | null
   archivedAt?: string | null
@@ -349,6 +350,7 @@ function parseProperty(o: unknown): PropertyRecord {
     name: reqStr(o, 'name'),
     description: optStr(o, 'description'),
     notes: optStr(o, 'notes'),
+    address: optStr(o, 'address'),
     monthlyRent: optNum(o, 'monthlyRent'),
     monthlyMortgagePayment: optNum(o, 'monthlyMortgagePayment'),
     archivedAt: optStr(o, 'archivedAt'),

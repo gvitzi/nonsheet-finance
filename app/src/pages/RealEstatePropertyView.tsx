@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type SyntheticEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ApiError, api } from '../api'
 import type { Property, PropertyExpense, PropertyMortgageEntry, PropertyValuation } from '../api'
@@ -29,6 +29,8 @@ const valuationEmpty = { date: '', value: '', currency: 'EUR' }
 const expenseEmpty = { date: '', name: '', description: '', amount: '' }
 const mortgageEmpty = { date: '', outstandingBalance: '', currency: 'EUR', loanName: '' }
 
+type PropertyAccordionSection = 'valuations' | 'expenses' | 'mortgages'
+
 export default function RealEstatePropertyView({ portfolioId, assetGroupId, propertyId, groupName }: Props) {
   const navigate = useNavigate()
   const [property, setProperty] = useState<Property | null>(null)
@@ -42,10 +44,12 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
     name: '',
     description: '',
     notes: '',
+    address: '',
     monthlyRent: '',
     monthlyMortgagePayment: '',
   })
   const [metaSaving, setMetaSaving] = useState(false)
+  const [detailsEditing, setDetailsEditing] = useState(false)
 
   const [vForm, setVForm] = useState(valuationEmpty)
   const [vEditing, setVEditing] = useState<PropertyValuation | null>(null)
@@ -58,6 +62,18 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
   const [mForm, setMForm] = useState(mortgageEmpty)
   const [mEditing, setMEditing] = useState<PropertyMortgageEntry | null>(null)
   const [mSaving, setMSaving] = useState(false)
+
+  const [openAccordionSection, setOpenAccordionSection] = useState<PropertyAccordionSection | null>('valuations')
+
+  const [selectedValuationId, setSelectedValuationId] = useState<string | null>(null)
+  const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null)
+  const [selectedMortgageId, setSelectedMortgageId] = useState<string | null>(null)
+
+  const onAccordionToggle = useCallback((section: PropertyAccordionSection, e: SyntheticEvent<HTMLDetailsElement>) => {
+    const el = e.currentTarget
+    if (el.open) setOpenAccordionSection(section)
+    else setOpenAccordionSection((prev) => (prev === section ? null : prev))
+  }, [])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -74,6 +90,7 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
         name: p.name,
         description: p.description ?? '',
         notes: p.notes ?? '',
+        address: p.address ?? '',
         monthlyRent: p.monthlyRent != null && !Number.isNaN(p.monthlyRent) ? String(p.monthlyRent) : '',
         monthlyMortgagePayment:
           p.monthlyMortgagePayment != null && !Number.isNaN(p.monthlyMortgagePayment) ? String(p.monthlyMortgagePayment) : '',
@@ -81,6 +98,9 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
       setValuations(v)
       setExpenses(e)
       setMortgages(m)
+      setSelectedValuationId(null)
+      setSelectedExpenseId(null)
+      setSelectedMortgageId(null)
     } catch {
       setProperty(null)
       setBanner({ type: 'err', text: 'Property not found.' })
@@ -92,6 +112,27 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    if (vEditing && selectedValuationId !== vEditing.id) {
+      setVEditing(null)
+      setVForm(valuationEmpty)
+    }
+  }, [selectedValuationId, vEditing])
+
+  useEffect(() => {
+    if (eEditing && selectedExpenseId !== eEditing.id) {
+      setEEditing(null)
+      setEForm(expenseEmpty)
+    }
+  }, [selectedExpenseId, eEditing])
+
+  useEffect(() => {
+    if (mEditing && selectedMortgageId !== mEditing.id) {
+      setMEditing(null)
+      setMForm(mortgageEmpty)
+    }
+  }, [selectedMortgageId, mEditing])
 
   const propertyLabel = property?.name ?? 'Property'
 
@@ -119,6 +160,31 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
     return (r ?? 0) - (m ?? 0)
   }, [metaForm.monthlyRent, metaForm.monthlyMortgagePayment])
 
+  const savedMonthlyCashflow = useMemo(() => {
+    if (!property) return null
+    const r = property.monthlyRent
+    const m = property.monthlyMortgagePayment
+    if (r == null && m == null) return null
+    return (r ?? 0) - (m ?? 0)
+  }, [property])
+
+  const cancelDetailsEdit = useCallback(() => {
+    if (!property) return
+    setMetaForm({
+      name: property.name,
+      description: property.description ?? '',
+      notes: property.notes ?? '',
+      address: property.address ?? '',
+      monthlyRent: property.monthlyRent != null && !Number.isNaN(property.monthlyRent) ? String(property.monthlyRent) : '',
+      monthlyMortgagePayment:
+        property.monthlyMortgagePayment != null && !Number.isNaN(property.monthlyMortgagePayment)
+          ? String(property.monthlyMortgagePayment)
+          : '',
+    })
+    setDetailsEditing(false)
+    setBanner(null)
+  }, [property])
+
   const saveMeta = async () => {
     if (!metaForm.name.trim()) {
       setBanner({ type: 'err', text: 'Name is required.' })
@@ -138,10 +204,12 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
         name: metaForm.name.trim(),
         description: metaForm.description.trim() || null,
         notes: metaForm.notes.trim() || null,
+        address: metaForm.address.trim() || null,
         monthlyRent: parseOptionalMoney(metaForm.monthlyRent),
         monthlyMortgagePayment: parseOptionalMoney(metaForm.monthlyMortgagePayment),
       })
       setProperty(p)
+      setDetailsEditing(false)
       setBanner({ type: 'ok', text: 'Saved.' })
     } catch (e: unknown) {
       setBanner({ type: 'err', text: err(e, 'Failed to save.') })
@@ -314,84 +382,201 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
       {banner?.type === 'err' ? <div className="page-error">{banner.text}</div> : null}
       {banner?.type === 'ok' ? <div className="page-success">{banner.text}</div> : null}
 
-      <div className="form-panel">
-        <h2>Details</h2>
-        <div className="form-grid">
-          <label className="span-2">
-            Name *
-            <input value={metaForm.name} onChange={(e) => setMetaForm((f) => ({ ...f, name: e.target.value }))} />
-          </label>
-          <label className="span-2">
-            Description (single line)
-            <input value={metaForm.description} onChange={(e) => setMetaForm((f) => ({ ...f, description: e.target.value }))} />
-          </label>
-          <label className="span-2">
-            Notes
-            <textarea rows={5} value={metaForm.notes} onChange={(e) => setMetaForm((f) => ({ ...f, notes: e.target.value }))} />
-          </label>
-          <div className="span-2" style={{ marginTop: '0.5rem' }}>
-            <h3 style={{ margin: '0 0 0.35rem', fontSize: '1.05rem' }}>Financial summary</h3>
-            <p className="page-subtitle" style={{ margin: 0 }}>
-              Value and liabilities follow the latest dated row in the valuation and mortgage tables below. Net cashflow is rent
-              minus mortgage payment (EUR).
-            </p>
-          </div>
-          <label>
-            Value (latest valuation)
-            <input
-              readOnly
-              value={
-                latestValuation ? fmt(latestValuation.value, latestValuation.currency) : '—'
-              }
-              className="input-readonly"
-            />
-          </label>
-          <label>
-            Liabilities (latest mortgage balance)
-            <input
-              readOnly
-              value={latestMortgage ? fmt(latestMortgage.outstandingBalance, latestMortgage.currency) : '—'}
-              className="input-readonly"
-            />
-          </label>
-          <label>
-            Rent (monthly)
-            <input
-              type="number"
-              step="0.01"
-              value={metaForm.monthlyRent}
-              onChange={(e) => setMetaForm((f) => ({ ...f, monthlyRent: e.target.value }))}
-            />
-          </label>
-          <label>
-            Mortgage monthly payment
-            <input
-              type="number"
-              step="0.01"
-              value={metaForm.monthlyMortgagePayment}
-              onChange={(e) => setMetaForm((f) => ({ ...f, monthlyMortgagePayment: e.target.value }))}
-            />
-          </label>
-          <label className="span-2">
-            Net cashflow (monthly)
-            <input
-              readOnly
-              value={derivedMonthlyCashflow === null ? '—' : fmt(derivedMonthlyCashflow, 'EUR')}
-              className="input-readonly"
-              title="Rent minus mortgage payment"
-            />
-          </label>
+      <section className="panel property-details-section" aria-labelledby="property-details-heading">
+        <div className="property-details-section__head">
+          <h2 id="property-details-heading">Details</h2>
+          {detailsEditing ? (
+            <button className="btn" type="button" onClick={cancelDetailsEdit}>
+              Cancel
+            </button>
+          ) : (
+            <button className="btn btn-primary" type="button" onClick={() => setDetailsEditing(true)}>
+              Edit details
+            </button>
+          )}
         </div>
-        <div className="form-actions">
-          <button className="btn btn-primary" type="button" onClick={saveMeta} disabled={metaSaving}>
-            {metaSaving ? 'Saving…' : 'Save details'}
-          </button>
-        </div>
-      </div>
 
-      <section className="stack">
-        <h2>Valuations over time</h2>
-        <p className="page-subtitle">Date and value for this property. Property columns are fixed for this view.</p>
+        {detailsEditing ? (
+          <>
+            <div className="form-grid property-details-section__form">
+              <label className="span-2">
+                Name *
+                <input value={metaForm.name} onChange={(e) => setMetaForm((f) => ({ ...f, name: e.target.value }))} />
+              </label>
+              <label className="span-2">
+                Description (single line)
+                <input
+                  value={metaForm.description}
+                  onChange={(e) => setMetaForm((f) => ({ ...f, description: e.target.value }))}
+                />
+              </label>
+              <label className="span-2">
+                Notes
+                <textarea rows={5} value={metaForm.notes} onChange={(e) => setMetaForm((f) => ({ ...f, notes: e.target.value }))} />
+              </label>
+              <label className="span-2">
+                Address
+                <textarea rows={2} value={metaForm.address} onChange={(e) => setMetaForm((f) => ({ ...f, address: e.target.value }))} />
+              </label>
+              <div className="span-2 property-details-section__fin-intro">
+                <h3 className="property-details-section__fin-title">Financial summary</h3>
+                <p className="page-subtitle property-details-section__fin-copy">
+                  Value and liabilities follow the latest dated row in the valuation and mortgage tables below. Net cashflow is
+                  rent minus mortgage payment (EUR).
+                </p>
+              </div>
+              <label>
+                Value (latest valuation)
+                <input
+                  readOnly
+                  value={latestValuation ? fmt(latestValuation.value, latestValuation.currency) : '—'}
+                  className="input-readonly"
+                />
+              </label>
+              <label>
+                Liabilities (latest mortgage balance)
+                <input
+                  readOnly
+                  value={latestMortgage ? fmt(latestMortgage.outstandingBalance, latestMortgage.currency) : '—'}
+                  className="input-readonly"
+                />
+              </label>
+              <label>
+                Rent (monthly)
+                <input
+                  type="number"
+                  step="0.01"
+                  value={metaForm.monthlyRent}
+                  onChange={(e) => setMetaForm((f) => ({ ...f, monthlyRent: e.target.value }))}
+                />
+              </label>
+              <label>
+                Mortgage monthly payment
+                <input
+                  type="number"
+                  step="0.01"
+                  value={metaForm.monthlyMortgagePayment}
+                  onChange={(e) => setMetaForm((f) => ({ ...f, monthlyMortgagePayment: e.target.value }))}
+                />
+              </label>
+              <label className="span-2">
+                Net cashflow (monthly)
+                <input
+                  readOnly
+                  value={derivedMonthlyCashflow === null ? '—' : fmt(derivedMonthlyCashflow, 'EUR')}
+                  className="input-readonly"
+                  title="Rent minus mortgage payment"
+                />
+              </label>
+            </div>
+            <div className="form-actions">
+              <button className="btn btn-primary" type="button" onClick={saveMeta} disabled={metaSaving}>
+                {metaSaving ? 'Saving…' : 'Save details'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="property-details-read">
+            <div className="property-details-read__block">
+              <div className="label">Name</div>
+              <div className="property-details-read__value">{property.name}</div>
+            </div>
+            <div className="property-details-read__block">
+              <div className="label">Description</div>
+              <div className="property-details-read__value property-details-read__value--muted">
+                {property.description?.trim() ? property.description : '—'}
+              </div>
+            </div>
+            <div className="property-details-read__block">
+              <div className="label">Notes</div>
+              {property.notes?.trim() ? (
+                <p className="property-details-read__notes">{property.notes}</p>
+              ) : (
+                <div className="property-details-read__value property-details-read__value--muted">—</div>
+              )}
+            </div>
+            <div className="property-details-read__block">
+              <div className="label">Address</div>
+              {property.address?.trim() ? (
+                <div className="property-details-read__address">{property.address}</div>
+              ) : (
+                <div className="property-details-read__value property-details-read__value--muted">—</div>
+              )}
+            </div>
+
+            <div className="property-details-read__fin">
+              <h3 className="property-details-section__fin-title">Financial summary</h3>
+              <p className="page-subtitle property-details-section__fin-copy">
+                Value and liabilities follow the latest dated row in the valuation and mortgage tables below. Net cashflow is
+                rent minus mortgage payment (EUR).
+              </p>
+              <div className="property-details-read__stats">
+                <div className="property-details-read__stat">
+                  <div className="label">Latest valuation</div>
+                  <div className="property-details-read__stat-value">
+                    {latestValuation ? fmt(latestValuation.value, latestValuation.currency) : '—'}
+                  </div>
+                  {latestValuation ? (
+                    <div className="property-details-read__stat-meta">
+                      As of {new Date(latestValuation.date).toLocaleDateString()}
+                    </div>
+                  ) : null}
+                </div>
+                <div className="property-details-read__stat">
+                  <div className="label">Latest mortgage balance</div>
+                  <div className="property-details-read__stat-value">
+                    {latestMortgage ? fmt(latestMortgage.outstandingBalance, latestMortgage.currency) : '—'}
+                  </div>
+                  {latestMortgage ? (
+                    <div className="property-details-read__stat-meta">
+                      As of {new Date(latestMortgage.date).toLocaleDateString()}
+                      {latestMortgage.loanName?.trim() ? ` · ${latestMortgage.loanName}` : ''}
+                    </div>
+                  ) : null}
+                </div>
+                <div className="property-details-read__stat">
+                  <div className="label">Rent (monthly)</div>
+                  <div className="property-details-read__stat-value">
+                    {property.monthlyRent != null && !Number.isNaN(property.monthlyRent)
+                      ? fmt(property.monthlyRent, 'EUR')
+                      : '—'}
+                  </div>
+                </div>
+                <div className="property-details-read__stat">
+                  <div className="label">Mortgage payment (monthly)</div>
+                  <div className="property-details-read__stat-value">
+                    {property.monthlyMortgagePayment != null && !Number.isNaN(property.monthlyMortgagePayment)
+                      ? fmt(property.monthlyMortgagePayment, 'EUR')
+                      : '—'}
+                  </div>
+                </div>
+                <div className="property-details-read__stat property-details-read__stat--wide">
+                  <div className="label">Net cashflow (monthly)</div>
+                  <div
+                    className={`property-details-read__stat-value property-details-read__stat-value--cashflow${
+                      savedMonthlyCashflow != null && savedMonthlyCashflow >= 0 ? ' positive' : ''
+                    }${savedMonthlyCashflow != null && savedMonthlyCashflow < 0 ? ' negative' : ''}`}
+                  >
+                    {savedMonthlyCashflow === null ? '—' : fmt(savedMonthlyCashflow, 'EUR')}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <div className="property-accordions" role="presentation">
+        <details
+          className="property-accordion"
+          open={openAccordionSection === 'valuations'}
+          onToggle={(e) => onAccordionToggle('valuations', e)}
+        >
+          <summary className="property-accordion__summary">
+            <span className="property-accordion__title">Valuations over time</span>
+          </summary>
+          <div className="property-accordion__body stack">
+        <p className="page-subtitle">Date and value for this property.</p>
 
         <div className="form-panel">
           <h3>{vEditing ? 'Edit valuation' : 'Add valuation'}</h3>
@@ -436,53 +621,75 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
         {valuations.length === 0 ? (
           <div className="empty-state">No valuation rows yet.</div>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Value</th>
-                <th>Property id</th>
-                <th>Property name</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {valuations.map((r) => (
-                <tr key={r.id}>
-                  <td>{new Date(r.date).toLocaleDateString()}</td>
-                  <td className="positive">{fmt(r.value, r.currency)}</td>
-                  <td>
-                    <code>{property.id}</code>
-                  </td>
-                  <td>{property.name}</td>
-                  <td className="actions">
-                    <button
-                      className="btn btn-sm"
-                      type="button"
-                      onClick={() => {
-                        setVEditing(r)
-                        setVForm({
-                          date: dateInputFromIso(r.date),
-                          value: String(r.value),
-                          currency: r.currency,
-                        })
-                      }}
-                    >
-                      Edit
-                    </button>
-                    <button className="btn btn-sm btn-danger" type="button" onClick={() => delValuation(r.id)}>
-                      Delete
-                    </button>
-                  </td>
+          <div className="property-table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Value</th>
+                  <th>Property name</th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {valuations.map((r) => (
+                  <tr
+                    key={r.id}
+                    className={`property-table-row--selectable${selectedValuationId === r.id ? ' property-table-row--selected' : ''}`}
+                    tabIndex={0}
+                    aria-selected={selectedValuationId === r.id}
+                    onClick={() => setSelectedValuationId((prev) => (prev === r.id ? null : r.id))}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter' && e.key !== ' ') return
+                      e.preventDefault()
+                      setSelectedValuationId((prev) => (prev === r.id ? null : r.id))
+                    }}
+                  >
+                    <td>{new Date(r.date).toLocaleDateString()}</td>
+                    <td className="positive">{fmt(r.value, r.currency)}</td>
+                    <td>{property.name}</td>
+                    <td className="actions" onClick={(e) => e.stopPropagation()}>
+                      {selectedValuationId === r.id ? (
+                        <>
+                          <button
+                            className="btn btn-sm"
+                            type="button"
+                            onClick={() => {
+                              setSelectedValuationId(r.id)
+                              setVEditing(r)
+                              setVForm({
+                                date: dateInputFromIso(r.date),
+                                value: String(r.value),
+                                currency: r.currency,
+                              })
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button className="btn btn-sm btn-danger" type="button" onClick={() => void delValuation(r.id)}>
+                            Delete
+                          </button>
+                        </>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
-      </section>
+          </div>
+        </details>
 
-      <section className="stack">
-        <h2>Expenses</h2>
+        <details
+          className="property-accordion"
+          open={openAccordionSection === 'expenses'}
+          onToggle={(e) => onAccordionToggle('expenses', e)}
+        >
+          <summary className="property-accordion__summary">
+            <span className="property-accordion__title">Expenses</span>
+          </summary>
+          <div className="property-accordion__body stack">
         <p className="page-subtitle">Recorded costs for this property (repairs, fees, insurance, etc.). Amounts in EUR.</p>
 
         <div className="form-panel">
@@ -528,52 +735,78 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
         {expenses.length === 0 ? (
           <div className="empty-state">No expenses yet.</div>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Name</th>
-                <th>Description</th>
-                <th>Amount</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {expenses.map((r) => (
-                <tr key={r.id}>
-                  <td>{new Date(r.date).toLocaleDateString()}</td>
-                  <td>{r.name}</td>
-                  <td>{r.description?.trim() ? r.description : '—'}</td>
-                  <td className="negative">{fmt(r.amount, 'EUR')}</td>
-                  <td className="actions">
-                    <button
-                      className="btn btn-sm"
-                      type="button"
-                      onClick={() => {
-                        setEEditing(r)
-                        setEForm({
-                          date: dateInputFromIso(r.date),
-                          name: r.name,
-                          description: r.description ?? '',
-                          amount: String(r.amount),
-                        })
-                      }}
-                    >
-                      Edit
-                    </button>
-                    <button className="btn btn-sm btn-danger" type="button" onClick={() => delExpense(r.id)}>
-                      Delete
-                    </button>
-                  </td>
+          <div className="property-table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Name</th>
+                  <th>Description</th>
+                  <th>Amount</th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {expenses.map((r) => (
+                  <tr
+                    key={r.id}
+                    className={`property-table-row--selectable${selectedExpenseId === r.id ? ' property-table-row--selected' : ''}`}
+                    tabIndex={0}
+                    aria-selected={selectedExpenseId === r.id}
+                    onClick={() => setSelectedExpenseId((prev) => (prev === r.id ? null : r.id))}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter' && e.key !== ' ') return
+                      e.preventDefault()
+                      setSelectedExpenseId((prev) => (prev === r.id ? null : r.id))
+                    }}
+                  >
+                    <td>{new Date(r.date).toLocaleDateString()}</td>
+                    <td>{r.name}</td>
+                    <td>{r.description?.trim() ? r.description : '—'}</td>
+                    <td className="negative">{fmt(r.amount, 'EUR')}</td>
+                    <td className="actions" onClick={(e) => e.stopPropagation()}>
+                      {selectedExpenseId === r.id ? (
+                        <>
+                          <button
+                            className="btn btn-sm"
+                            type="button"
+                            onClick={() => {
+                              setSelectedExpenseId(r.id)
+                              setEEditing(r)
+                              setEForm({
+                                date: dateInputFromIso(r.date),
+                                name: r.name,
+                                description: r.description ?? '',
+                                amount: String(r.amount),
+                              })
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button className="btn btn-sm btn-danger" type="button" onClick={() => void delExpense(r.id)}>
+                            Delete
+                          </button>
+                        </>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
-      </section>
+          </div>
+        </details>
 
-      <section className="stack">
-        <h2>Mortgage over time</h2>
+        <details
+          className="property-accordion"
+          open={openAccordionSection === 'mortgages'}
+          onToggle={(e) => onAccordionToggle('mortgages', e)}
+        >
+          <summary className="property-accordion__summary">
+            <span className="property-accordion__title">Mortgage over time</span>
+          </summary>
+          <div className="property-accordion__body stack">
         <p className="page-subtitle">Outstanding balance (debt) per date. Loan name is optional.</p>
 
         <div className="form-panel">
@@ -624,53 +857,69 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
         {mortgages.length === 0 ? (
           <div className="empty-state">No mortgage rows yet.</div>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Outstanding (debt)</th>
-                <th>Loan name</th>
-                <th>Property id</th>
-                <th>Property name</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {mortgages.map((r) => (
-                <tr key={r.id}>
-                  <td>{new Date(r.date).toLocaleDateString()}</td>
-                  <td className="negative">{fmt(r.outstandingBalance, r.currency)}</td>
-                  <td>{r.loanName ?? '—'}</td>
-                  <td>
-                    <code>{property.id}</code>
-                  </td>
-                  <td>{property.name}</td>
-                  <td className="actions">
-                    <button
-                      className="btn btn-sm"
-                      type="button"
-                      onClick={() => {
-                        setMEditing(r)
-                        setMForm({
-                          date: dateInputFromIso(r.date),
-                          outstandingBalance: String(r.outstandingBalance),
-                          currency: r.currency,
-                          loanName: r.loanName ?? '',
-                        })
-                      }}
-                    >
-                      Edit
-                    </button>
-                    <button className="btn btn-sm btn-danger" type="button" onClick={() => delMortgage(r.id)}>
-                      Delete
-                    </button>
-                  </td>
+          <div className="property-table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Outstanding (debt)</th>
+                  <th>Loan name</th>
+                  <th>Property name</th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {mortgages.map((r) => (
+                  <tr
+                    key={r.id}
+                    className={`property-table-row--selectable${selectedMortgageId === r.id ? ' property-table-row--selected' : ''}`}
+                    tabIndex={0}
+                    aria-selected={selectedMortgageId === r.id}
+                    onClick={() => setSelectedMortgageId((prev) => (prev === r.id ? null : r.id))}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter' && e.key !== ' ') return
+                      e.preventDefault()
+                      setSelectedMortgageId((prev) => (prev === r.id ? null : r.id))
+                    }}
+                  >
+                    <td>{new Date(r.date).toLocaleDateString()}</td>
+                    <td className="negative">{fmt(r.outstandingBalance, r.currency)}</td>
+                    <td>{r.loanName ?? '—'}</td>
+                    <td>{property.name}</td>
+                    <td className="actions" onClick={(e) => e.stopPropagation()}>
+                      {selectedMortgageId === r.id ? (
+                        <>
+                          <button
+                            className="btn btn-sm"
+                            type="button"
+                            onClick={() => {
+                              setSelectedMortgageId(r.id)
+                              setMEditing(r)
+                              setMForm({
+                                date: dateInputFromIso(r.date),
+                                outstandingBalance: String(r.outstandingBalance),
+                                currency: r.currency,
+                                loanName: r.loanName ?? '',
+                              })
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button className="btn btn-sm btn-danger" type="button" onClick={() => void delMortgage(r.id)}>
+                            Delete
+                          </button>
+                        </>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
-      </section>
+          </div>
+        </details>
+      </div>
     </div>
   )
 }

@@ -36,18 +36,18 @@ type Props = {
 export default function StatsPanel({ assetGroupId, displayCurrency, items }: Props) {
   const fmtValue = (n: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: displayCurrency, maximumFractionDigits: 0 }).format(n)
-  const [expanded, setExpanded] = useState(true)
+  const [detailsOpen, setDetailsOpen] = useState(true)
   const [history, setHistory] = useState<AssetGroupHistory | null>(null)
   const [histLoading, setHistLoading] = useState(false)
 
   useEffect(() => {
-    if (!expanded || history) return
+    if (!detailsOpen || history) return
     setHistLoading(true)
     api.assetGroups.history(assetGroupId)
       .then(setHistory)
       .catch(() => {})
       .finally(() => setHistLoading(false))
-  }, [expanded, assetGroupId, history])
+  }, [detailsOpen, assetGroupId, history])
 
   // Reset cached history when the group or display currency changes
   useEffect(() => {
@@ -91,15 +91,15 @@ export default function StatsPanel({ assetGroupId, displayCurrency, items }: Pro
   }, [history])
 
   return (
-    <section className="stack">
-      <div className="page-header">
-        <h2>Statistics</h2>
-        <button className="btn" type="button" onClick={() => setExpanded((v) => !v)}>
-          {expanded ? 'Collapse' : 'Expand'}
-        </button>
-      </div>
-
-      {expanded && (
+    <details
+      className="property-accordion stats-panel-details"
+      open={detailsOpen}
+      onToggle={(e) => setDetailsOpen(e.currentTarget.open)}
+    >
+      <summary className="property-accordion__summary" aria-label="Show or hide charts">
+        <span className="property-accordion__title">Charts</span>
+      </summary>
+      <div className="property-accordion__body">
         <div className="panel-grid">
           <div className="panel">
             <h2 style={{ marginTop: 0 }}>Net Worth by Asset</h2>
@@ -185,7 +185,7 @@ export default function StatsPanel({ assetGroupId, displayCurrency, items }: Pro
             )}
           </div>
         </div>
-      )}
-    </section>
+      </div>
+    </details>
   )
 }

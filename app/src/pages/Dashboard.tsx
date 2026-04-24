@@ -375,7 +375,13 @@ export default function Dashboard() {
     <div className="page">
       <div className="page-header">
         <h1>Dashboard</h1>
-        <div className="dashboard-filters">
+        <details className="dashboard-filters-drawer">
+          <summary className="dashboard-filters-drawer__summary" aria-label="Show or hide dashboard filters">
+            <span className="dashboard-filters-drawer__summary-text">
+              {filterActive ? 'Filters · active' : 'Filters'}
+            </span>
+          </summary>
+          <div className="dashboard-filters">
           <div className="dashboard-filters__row">
             <div className="dashboard-filters__portfolio-wrap">
               <span className="dashboard-filters__field-label" id="dashboard-portfolio-filter-label">
@@ -459,7 +465,8 @@ export default function Dashboard() {
               </select>
             </label>
           </div>
-        </div>
+          </div>
+        </details>
       </div>
       <p className="page-subtitle">{subtitle}</p>
       {showingConvertedCurrency ? (
