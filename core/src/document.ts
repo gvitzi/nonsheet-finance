@@ -101,13 +101,31 @@ export type PropertyValuationRecord = {
   updatedAt: string
 }
 
+/** Real-estate loan (mortgage) metadata; history rows live in `PropertyMortgageRecord` with matching `loanId`. */
+export type PropertyLoanRecord = {
+  id: string
+  propertyId: string
+  name: string
+  /** Loan maturity / end date (YYYY-MM-DD). */
+  endDate: string
+  /** Nominal annual interest rate in percent, e.g. 3.5 for 3.5% p.a.; null when unknown. */
+  interestAnnualPercent: number | null
+  createdAt: string
+  updatedAt: string
+}
+
 export type PropertyMortgageRecord = {
   id: string
   propertyId: string
   date: string
   outstandingBalance: number
   currency: string
+  /** @deprecated Prefer `loanId` + `PropertyLoanRecord.name`. Kept for legacy rows. */
   loanName?: string | null
+  /** When set, this mark belongs to a `PropertyLoanRecord`; omitted/null = legacy flat row. */
+  loanId?: string | null
+  principalMonthlyPayment?: number | null
+  interestMonthlyPayment?: number | null
   createdAt: string
   updatedAt: string
 }
@@ -206,6 +224,7 @@ export type WealthDocument = {
   liabilities: LiabilityRecord[]
   properties: PropertyRecord[]
   propertyValuations: PropertyValuationRecord[]
+  propertyLoans: PropertyLoanRecord[]
   propertyMortgages: PropertyMortgageRecord[]
   propertyExpenses: PropertyExpenseRecord[]
   propertyRentPeriods: PropertyRentPeriodRecord[]
@@ -388,8 +407,39 @@ function parsePropertyValuation(o: unknown): PropertyValuationRecord {
   }
 }
 
+function parseNumOrZero(o: Record<string, unknown>, k: string): number {
+  const v = o[k]
+  if (v === undefined || v === null) return 0
+  if (typeof v !== 'number' || Number.isNaN(v)) throw new WealthDocumentParseError(`Invalid number|null: ${k}`)
+  return v
+}
+
+function parsePropertyLoan(o: unknown): PropertyLoanRecord {
+  if (!isObj(o)) throw new WealthDocumentParseError('propertyLoan item')
+  const interestRaw = o.interestAnnualPercent
+  let interestAnnualPercent: number | null = null
+  if (interestRaw !== undefined && interestRaw !== null) {
+    if (typeof interestRaw !== 'number' || Number.isNaN(interestRaw)) {
+      throw new WealthDocumentParseError('propertyLoan.interestAnnualPercent must be a number or null')
+    }
+    interestAnnualPercent = interestRaw
+  }
+  return {
+    id: reqStr(o, 'id'),
+    propertyId: reqStr(o, 'propertyId'),
+    name: reqStr(o, 'name'),
+    endDate: typeof o.endDate === 'string' ? o.endDate.slice(0, 10) : reqStr(o, 'endDate'),
+    interestAnnualPercent,
+    createdAt: reqStr(o, 'createdAt'),
+    updatedAt: reqStr(o, 'updatedAt'),
+  }
+}
+
 function parsePropertyMortgage(o: unknown): PropertyMortgageRecord {
   if (!isObj(o)) throw new WealthDocumentParseError('propertyMortgage item')
+  const hasPayment =
+    Object.prototype.hasOwnProperty.call(o, 'principalMonthlyPayment') ||
+    Object.prototype.hasOwnProperty.call(o, 'interestMonthlyPayment')
   return {
     id: reqStr(o, 'id'),
     propertyId: reqStr(o, 'propertyId'),
@@ -397,6 +447,13 @@ function parsePropertyMortgage(o: unknown): PropertyMortgageRecord {
     outstandingBalance: reqNum(o, 'outstandingBalance'),
     currency: typeof o.currency === 'string' ? o.currency : 'EUR',
     loanName: optStr(o, 'loanName'),
+    loanId: optStr(o, 'loanId'),
+    ...(hasPayment
+      ? {
+          principalMonthlyPayment: parseNumOrZero(o, 'principalMonthlyPayment'),
+          interestMonthlyPayment: parseNumOrZero(o, 'interestMonthlyPayment'),
+        }
+      : {}),
     createdAt: reqStr(o, 'createdAt'),
     updatedAt: reqStr(o, 'updatedAt'),
   }
@@ -574,6 +631,7 @@ export function parseWealthDocument(json: unknown): WealthDocument {
     propertyValuations: json.propertyValuations !== undefined
       ? parseArr(json.propertyValuations, 'propertyValuations', parsePropertyValuation)
       : [],
+    propertyLoans: json.propertyLoans !== undefined ? parseArr(json.propertyLoans, 'propertyLoans', parsePropertyLoan) : [],
     propertyMortgages: json.propertyMortgages !== undefined
       ? parseArr(json.propertyMortgages, 'propertyMortgages', parsePropertyMortgage)
       : [],
@@ -766,6 +824,7 @@ export function createEmptyWealthDocument(): WealthDocument {
     liabilities: [],
     properties: [],
     propertyValuations: [],
+    propertyLoans: [],
     propertyMortgages: [],
     propertyExpenses: [],
     propertyRentPeriods: [],

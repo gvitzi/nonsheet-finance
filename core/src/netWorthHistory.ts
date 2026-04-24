@@ -5,6 +5,7 @@
 
 import type { FxRateRecord } from './document.js'
 import { convertAmountViaFxRates } from './fxUsd.js'
+import { mortgageDebtContributionsAsOf } from './propertyMortgageAggregate.js'
 
 const SEC = 'securities'
 const KIND_PURCHASE = 'purchase'
@@ -12,7 +13,7 @@ const KIND_SALE = 'sale'
 
 export type PropertySlice = {
   valuations: { date: Date; value: number; currency: string }[]
-  mortgages: { date: Date; outstandingBalance: number; currency: string }[]
+  mortgages: { date: Date; outstandingBalance: number; currency: string; loanId?: string | null }[]
 }
 
 export type AssetSlice = {
@@ -50,19 +51,6 @@ function latestPropertyValueMetaBefore(
   eligible.sort((a, b) => b.date.getTime() - a.date.getTime())
   const row = eligible[0]
   return { value: row.value, currency: row.currency }
-}
-
-function latestMortgageMetaBefore(
-  rows: { date: Date; outstandingBalance: number; currency: string }[],
-  asOf: Date,
-  fallback: { value: number; currency: string },
-): { value: number; currency: string } {
-  const t = endOfDay(asOf)
-  const eligible = rows.filter((v) => v.date.getTime() <= t)
-  if (!eligible.length) return fallback
-  eligible.sort((a, b) => b.date.getTime() - a.date.getTime())
-  const row = eligible[0]
-  return { value: row.outstandingBalance, currency: row.currency }
 }
 
 function positionAtDate(
@@ -155,7 +143,7 @@ export function computeGroupHistory(
       id: string
       name: string
       valuations: { date: Date; value: number; currency: string }[]
-      mortgages: { date: Date; outstandingBalance: number; currency: string }[]
+      mortgages: { date: Date; outstandingBalance: number; currency: string; loanId?: string | null }[]
     }>
   },
   fx?: GroupHistoryFxOptions,
@@ -208,7 +196,6 @@ export function computeGroupHistory(
   }
 
   for (const prop of input.realEstateProperties ?? []) {
-    const mortFallbackCur = prop.mortgages[0]?.currency ?? 'USD'
     const valFallbackCur = prop.valuations[0]?.currency ?? 'USD'
     const dateKeys = [
       ...new Set([
@@ -220,9 +207,20 @@ export function computeGroupHistory(
     const series = dateKeys.flatMap((dk) => {
       const vMeta = latestPropertyValueMetaBefore(prop.valuations, asOf(dk), { value: 0, currency: valFallbackCur })
       if (vMeta.value === 0 && prop.valuations.length === 0) return []
-      const mMeta = latestMortgageMetaBefore(prop.mortgages, asOf(dk), { value: 0, currency: mortFallbackCur })
-      const net =
-        conv(vMeta.value, vMeta.currency, dk) - conv(mMeta.value, mMeta.currency, dk)
+      const mContrib = mortgageDebtContributionsAsOf(
+        prop.mortgages.map((m) => ({
+          date: m.date,
+          loanId: m.loanId,
+          outstandingBalance: m.outstandingBalance,
+          currency: m.currency,
+        })),
+        asOf(dk),
+      )
+      let mSum = 0
+      for (const c of mContrib) {
+        mSum += conv(c.value, c.currency, dk)
+      }
+      const net = conv(vMeta.value, vMeta.currency, dk) - mSum
       return [{ date: dk, value: net }]
     })
     if (series.length > 0) items.push({ id: prop.id, name: prop.name, series })
@@ -269,13 +267,20 @@ export function computeNetWorthHistorySeries(input: {
       const valFb = p.valuations[0]
         ? { value: 0, currency: p.valuations[0].currency }
         : { value: 0, currency: 'USD' }
-      const mortFb = p.mortgages[0]
-        ? { value: 0, currency: p.mortgages[0].currency }
-        : { value: 0, currency: 'USD' }
       const vMeta = latestPropertyValueMetaBefore(p.valuations, asOf, valFb)
-      const mMeta = latestMortgageMetaBefore(p.mortgages, asOf, mortFb)
+      const mContrib = mortgageDebtContributionsAsOf(
+        p.mortgages.map((m) => ({
+          date: m.date,
+          loanId: m.loanId,
+          outstandingBalance: m.outstandingBalance,
+          currency: m.currency,
+        })),
+        asOf,
+      )
       propertyAssets += cvt(vMeta.value, vMeta.currency)
-      propertyMortgages += cvt(mMeta.value, mMeta.currency)
+      for (const c of mContrib) {
+        propertyMortgages += cvt(c.value, c.currency)
+      }
     }
 
     let otherAssets = 0
@@ -356,12 +361,21 @@ export function computeNetWorthByAssetGroupAtDates(input: {
       const valFb = p.valuations[0]
         ? { value: 0, currency: p.valuations[0].currency }
         : { value: 0, currency: 'USD' }
-      const mortFb = p.mortgages[0]
-        ? { value: 0, currency: p.mortgages[0].currency }
-        : { value: 0, currency: 'USD' }
       const vMeta = latestPropertyValueMetaBefore(p.valuations, asOf, valFb)
-      const mMeta = latestMortgageMetaBefore(p.mortgages, asOf, mortFb)
-      const net = cvt(vMeta.value, vMeta.currency) - cvt(mMeta.value, mMeta.currency)
+      const mContrib = mortgageDebtContributionsAsOf(
+        p.mortgages.map((m) => ({
+          date: m.date,
+          loanId: m.loanId,
+          outstandingBalance: m.outstandingBalance,
+          currency: m.currency,
+        })),
+        asOf,
+      )
+      let mSum = 0
+      for (const c of mContrib) {
+        mSum += cvt(c.value, c.currency)
+      }
+      const net = cvt(vMeta.value, vMeta.currency) - mSum
       sums[gid] += net
     }
 

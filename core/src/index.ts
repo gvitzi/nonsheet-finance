@@ -75,6 +75,7 @@ export interface SettingDto extends BaseEntity {
 export * from './document.js'
 export * from './rentPeriods.js'
 export * from './fxUsd.js'
+export * from './propertyMortgageAggregate.js'
 export * from './netWorthHistory.js'
 export * from './dashboardSummary.js'
 export * from './markIds.js'

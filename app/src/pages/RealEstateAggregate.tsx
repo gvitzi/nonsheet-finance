@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { mortgageDebtContributionsAsOf } from '@nonsheet-finance/core'
 import { ApiError, api } from '../api'
 import type { AssetGroup, Property, PropertyMortgageEntry, PropertyValuation } from '../api'
 import { assetGroupEditPath, assetGroupPropertyPath } from '../portfolioPaths'
@@ -23,17 +24,49 @@ function latestByDate<T extends { date: string }>(rows: T[]): T | undefined {
   return [...rows].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
 }
 
-type Row = Property & { latestValuation?: PropertyValuation | null; latestMortgage?: PropertyMortgageEntry | null }
+type Row = Property & { latestValuation?: PropertyValuation | null; mortgageEntries: PropertyMortgageEntry[] }
+
+function mortgageDebtDisplay(mgs: PropertyMortgageEntry[]): string {
+  const cont = mortgageDebtContributionsAsOf(
+    mgs.map((m) => ({
+      date: m.date,
+      loanId: m.loanId,
+      outstandingBalance: m.outstandingBalance,
+      currency: m.currency,
+    })),
+    new Date(),
+  )
+  if (!cont.length) return '—'
+  const curs = new Set(cont.map((c) => c.currency))
+  if (curs.size === 1) return fmt(cont.reduce((s, c) => s + c.value, 0), cont[0]!.currency)
+  return 'Various currencies'
+}
 
 function getPropertyListMetrics(p: Row) {
   const value = p.latestValuation ? fmt(p.latestValuation.value, p.latestValuation.currency) : '—'
-  const liabilities = p.latestMortgage ? fmt(p.latestMortgage.outstandingBalance, p.latestMortgage.currency) : '—'
+  const liabilities = mortgageDebtDisplay(p.mortgageEntries)
   let netValue = '—'
   let netValueClass: string | undefined
   if (p.latestValuation) {
-    const net = p.latestValuation.value - (p.latestMortgage?.outstandingBalance ?? 0)
-    netValue = fmt(net, p.latestValuation.currency)
-    netValueClass = net >= 0 ? 'positive' : 'negative'
+    const v0 = p.latestValuation
+    const cont = mortgageDebtContributionsAsOf(
+      p.mortgageEntries.map((m) => ({
+        date: m.date,
+        loanId: m.loanId,
+        outstandingBalance: m.outstandingBalance,
+        currency: m.currency,
+      })),
+      new Date(),
+    )
+    if (cont.length === 0) {
+      netValue = fmt(v0.value, v0.currency)
+      netValueClass = v0.value >= 0 ? 'positive' : 'negative'
+    } else if (cont.every((c) => c.currency === v0.currency)) {
+      const debtSum = cont.reduce((s, c) => s + c.value, 0)
+      const net = v0.value - debtSum
+      netValue = fmt(net, v0.currency)
+      netValueClass = net >= 0 ? 'positive' : 'negative'
+    }
   }
   const cashflowClass =
     p.monthlyCashflow == null || Number.isNaN(p.monthlyCashflow)
@@ -47,7 +80,13 @@ function getPropertyListMetrics(p: Row) {
     netValue,
     netValueClass,
     rent: fmtMonthly(p.effectiveMonthlyRent),
-    mortgagePayment: fmtMonthly(p.monthlyMortgagePayment),
+    mortgagePayment: (() => {
+      const rentTotal = p.effectiveMonthlyRent + p.effectiveMonthlyHausgeld
+      if (p.monthlyCashflow != null && !Number.isNaN(p.monthlyCashflow)) {
+        return fmtMonthly(rentTotal - p.monthlyCashflow)
+      }
+      return fmtMonthly(p.monthlyMortgagePayment)
+    })(),
     cashflow: fmtMonthly(p.monthlyCashflow),
     cashflowClass,
   }
@@ -100,7 +139,7 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
           return {
             ...p,
             latestValuation: latestByDate(vals) ?? null,
-            latestMortgage: latestByDate(mgs) ?? null,
+            mortgageEntries: mgs,
           }
         }),
       )
@@ -122,9 +161,17 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
       rows.map((p) => {
         const v = p.latestValuation?.value ?? 0
         const vCur = p.latestValuation?.currency ?? 'USD'
-        const m = p.latestMortgage?.outstandingBalance ?? 0
-        const mCur = p.latestMortgage?.currency ?? 'USD'
-        const net = convert(v, vCur) - convert(m, mCur)
+        const cont = mortgageDebtContributionsAsOf(
+          p.mortgageEntries.map((m) => ({
+            date: m.date,
+            loanId: m.loanId,
+            outstandingBalance: m.outstandingBalance,
+            currency: m.currency,
+          })),
+          new Date(),
+        )
+        const debtSum = cont.reduce((s, c) => s + convert(c.value, c.currency), 0)
+        const net = convert(v, vCur) - debtSum
         return { id: p.id, name: p.name, value: Math.max(0, net) }
       }),
     [rows, convert],
@@ -190,8 +237,8 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
           <p className="eyebrow">Real estate</p>
           <h1>{group.name}</h1>
           <p className="page-subtitle">
-            All properties in this group. Value and liabilities follow the latest valuation and mortgage rows. Rent follows the
-            rent period that contains today (set on each property page). Cashflow is rent plus Hausgeld minus mortgage payment.
+            All properties in this group. Liabilities sum the latest mortgage mark per loan (and legacy marks). Rent follows the
+            rent period that contains today (set on each property page). Cashflow uses per-loan payments when configured.
           </p>
         </div>
         <Link className="btn" to={assetGroupEditPath(portfolioId, assetGroupId)}>

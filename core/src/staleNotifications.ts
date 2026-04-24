@@ -123,8 +123,8 @@ export function computeStaleDataNotifications(doc: WealthDocument, nowInput?: Da
 
     const valuations = doc.propertyValuations.filter((v) => v.propertyId === prop.id)
     const mortgages = doc.propertyMortgages.filter((m) => m.propertyId === prop.id)
+    const loans = doc.propertyLoans.filter((l) => l.propertyId === prop.id)
     const latestValMs = latestAsOfDateMs(valuations)
-    const latestMortMs = latestAsOfDateMs(mortgages)
 
     const pid = ag.portfolioId
     const gid = ag.id
@@ -143,16 +143,34 @@ export function computeStaleDataNotifications(doc: WealthDocument, nowInput?: Da
       })
     }
 
-    const trackMortgage =
+    const trackMortgageLegacy =
       mortgages.length > 0 || (prop.monthlyMortgagePayment != null && prop.monthlyMortgagePayment > 0)
-    if (trackMortgage && (latestMortMs == null || latestMortMs < cutoffMs)) {
-      const when = latestMortMs != null ? fmt(latestMortMs) : 'none on file'
-      out.push({
-        id: `stale-property-${prop.id}-mortgage`,
-        message: `Real estate ${prop.name}: add a mortgage balance mark with as-of date within the last ${months} month${months === 1 ? '' : 's'}. Latest mortgage as of: ${when}.`,
-        severity: 'warning',
-        action: openProperty,
-      })
+
+    if (loans.length > 0) {
+      for (const loan of loans) {
+        const loanMarks = mortgages.filter((m) => m.loanId === loan.id)
+        const latestLoanMortMs = latestAsOfDateMs(loanMarks)
+        if (latestLoanMortMs == null || latestLoanMortMs < cutoffMs) {
+          const when = latestLoanMortMs != null ? fmt(latestLoanMortMs) : 'none on file'
+          out.push({
+            id: `stale-property-${prop.id}-loan-${loan.id}`,
+            message: `Real estate ${prop.name} · loan ${loan.name}: add a mortgage balance mark with as-of date within the last ${months} month${months === 1 ? '' : 's'}. Latest mortgage as of: ${when}.`,
+            severity: 'warning',
+            action: openProperty,
+          })
+        }
+      }
+    } else if (trackMortgageLegacy) {
+      const latestMortMs = latestAsOfDateMs(mortgages)
+      if (latestMortMs == null || latestMortMs < cutoffMs) {
+        const when = latestMortMs != null ? fmt(latestMortMs) : 'none on file'
+        out.push({
+          id: `stale-property-${prop.id}-mortgage`,
+          message: `Real estate ${prop.name}: add a mortgage balance mark with as-of date within the last ${months} month${months === 1 ? '' : 's'}. Latest mortgage as of: ${when}.`,
+          severity: 'warning',
+          action: openProperty,
+        })
+      }
     }
   }
 

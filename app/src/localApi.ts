@@ -6,6 +6,7 @@ import {
   findOverlappingRentPeriods,
   mergeFxRateRecords,
   mergeSecurityInfoRecords,
+  mortgageLatestSlicesAsOf,
   newEntityTimestamps,
   rentPeriodDateYmd,
   securityValuationIdForAsset,
@@ -27,6 +28,7 @@ import type {
   Portfolio,
   Property,
   PropertyExpense,
+  PropertyLoan,
   PropertyMortgageEntry,
   PropertyRentPeriod,
   PropertyValuation,
@@ -105,14 +107,15 @@ function addCalendarDaysToYmd(ymd: string, deltaDays: number): string {
  * starts strictly earlier, at the calendar day before `newStartYmd`.
  */
 function withOpenRentPeriodsClosedBeforeStart(
-  periods: PropertyRentPeriodRecord[],
+  periods: PropertyRentPeriodRecord[] | undefined,
   propertyId: string,
   newStartYmd: string,
   updatedAt: string,
 ): PropertyRentPeriodRecord[] {
-  if (newStartYmd.length < 10) return periods
+  const list = periods ?? []
+  if (newStartYmd.length < 10) return list
   const prevEndYmd = addCalendarDaysToYmd(newStartYmd, -1)
-  return periods.map((r) => {
+  return list.map((r) => {
     if (r.propertyId !== propertyId) return r
     const open = r.endDate == null || r.endDate === ''
     if (!open) return r
@@ -124,7 +127,7 @@ function withOpenRentPeriodsClosedBeforeStart(
 }
 
 function assertRentPeriodNoOverlap(doc: WealthDocument, candidate: PropertyRentPeriodRecord, ignoreId?: string): void {
-  const hits = findOverlappingRentPeriods(doc.propertyRentPeriods, candidate, ignoreId)
+  const hits = findOverlappingRentPeriods(doc.propertyRentPeriods ?? [], candidate, ignoreId)
   if (hits.length > 0) throw new ApiError('This rent period overlaps an existing one for this property.', 400)
 }
 
@@ -160,9 +163,36 @@ function enrichAsset(doc: WealthDocument, a: (typeof doc.assets)[0]): Asset {
   }
 }
 
+function mortgagePaymentForCashflow(doc: WealthDocument, p: (typeof doc.properties)[0]): number | null | undefined {
+  const loans = doc.propertyLoans.filter((l) => l.propertyId === p.id)
+  const marks = doc.propertyMortgages.filter((m) => m.propertyId === p.id)
+  if (loans.length === 0) return p.monthlyMortgagePayment
+  const loanIds = new Set(loans.map((l) => l.id))
+  const hasLoanMark = marks.some((m) => m.loanId && loanIds.has(m.loanId))
+  if (!hasLoanMark) return p.monthlyMortgagePayment
+  const slices = mortgageLatestSlicesAsOf(
+    marks.map((m) => ({
+      date: m.date,
+      loanId: m.loanId,
+      outstandingBalance: m.outstandingBalance,
+      currency: m.currency,
+      principalMonthlyPayment: m.principalMonthlyPayment,
+      interestMonthlyPayment: m.interestMonthlyPayment,
+    })),
+    new Date(),
+  )
+  let sum = 0
+  for (const s of slices) {
+    if (s.loanId && loanIds.has(s.loanId)) {
+      sum += s.principalMonthly + s.interestMonthly
+    }
+  }
+  return sum
+}
+
 function serializeProperty(doc: WealthDocument, p: (typeof doc.properties)[0]): Property {
   const ag = doc.assetGroups.find((g) => g.id === p.assetGroupId)
-  const active = activeRentPeriodForProperty(doc.propertyRentPeriods, p.id, localCalendarYmd())
+  const active = activeRentPeriodForProperty(doc.propertyRentPeriods ?? [], p.id, localCalendarYmd())
   const effectiveMonthlyRent = active ? active.rent : 0
   const effectiveMonthlyHausgeld = active ? active.hausgeld : 0
   const rentTotal = effectiveMonthlyRent + effectiveMonthlyHausgeld
@@ -170,7 +200,7 @@ function serializeProperty(doc: WealthDocument, p: (typeof doc.properties)[0]): 
     ...p,
     effectiveMonthlyRent,
     effectiveMonthlyHausgeld,
-    monthlyCashflow: derivedMonthlyCashflow(rentTotal, p.monthlyMortgagePayment),
+    monthlyCashflow: derivedMonthlyCashflow(rentTotal, mortgagePaymentForCashflow(doc, p)),
     assetGroup: ag ? { id: ag.id, name: ag.name, kind: ag.kind } : undefined,
   } as Property
 }
@@ -330,9 +360,10 @@ export const api = {
         ...d,
         properties: d.properties.filter((p) => p.id !== id),
         propertyValuations: d.propertyValuations.filter((v) => v.propertyId !== id),
+        propertyLoans: d.propertyLoans.filter((l) => l.propertyId !== id),
         propertyMortgages: d.propertyMortgages.filter((m) => m.propertyId !== id),
         propertyExpenses: d.propertyExpenses.filter((e) => e.propertyId !== id),
-        propertyRentPeriods: d.propertyRentPeriods.filter((r) => r.propertyId !== id),
+        propertyRentPeriods: (d.propertyRentPeriods ?? []).filter((r) => r.propertyId !== id),
       }))
       notifyPortfolios()
       return Promise.resolve()
@@ -389,20 +420,108 @@ export const api = {
       }))
       return Promise.resolve()
     },
-    listMortgageEntries: (propertyId: string): Promise<PropertyMortgageEntry[]> => {
+    listLoans: (propertyId: string): Promise<PropertyLoan[]> => {
       const d = getWealthDocument()
       return Promise.resolve(
-        d.propertyMortgages
-          .filter((m) => m.propertyId === propertyId)
-          .map((m) => {
+        d.propertyLoans
+          .filter((l) => l.propertyId === propertyId)
+          .map((l) => {
             const prop = d.properties.find((p) => p.id === propertyId)
-            return { ...m, property: prop ? { id: prop.id, name: prop.name } : undefined } as PropertyMortgageEntry
+            return {
+              ...l,
+              property: prop ? { id: prop.id, name: prop.name } : undefined,
+            } as PropertyLoan
           }),
+      )
+    },
+    createLoan: (
+      propertyId: string,
+      data: { name: string; endDate: string; interestAnnualPercent?: number | null },
+    ): Promise<PropertyLoan> => {
+      const d0 = getWealthDocument()
+      if (!d0.properties.some((p) => p.id === propertyId)) return rej(404, 'Property not found')
+      const { createdAt, updatedAt } = newEntityTimestamps()
+      const row = {
+        id: randomId(),
+        propertyId,
+        name: data.name.trim() || 'Loan',
+        endDate: data.endDate.slice(0, 10),
+        interestAnnualPercent:
+          data.interestAnnualPercent === undefined || data.interestAnnualPercent === null
+            ? null
+            : data.interestAnnualPercent,
+        createdAt,
+        updatedAt,
+      }
+      updateWealthDocument((d) => ({ ...d, propertyLoans: [...d.propertyLoans, row] }))
+      notifyPortfolios()
+      const d1 = getWealthDocument()
+      const created = d1.propertyLoans.find((x) => x.id === row.id)
+      if (!created) return rej(500, 'Failed to read new loan')
+      const prop = d1.properties.find((p) => p.id === propertyId)
+      return Promise.resolve({ ...created, property: prop ? { id: prop.id, name: prop.name } : undefined } as PropertyLoan)
+    },
+    updateLoan: (
+      propertyId: string,
+      loanId: string,
+      data: Partial<{ name: string; endDate: string; interestAnnualPercent: number | null }>,
+    ): Promise<PropertyLoan> => {
+      const t = nowIso()
+      updateWealthDocument((d) => ({
+        ...d,
+        propertyLoans: d.propertyLoans.map((l) =>
+          l.id === loanId && l.propertyId === propertyId
+            ? {
+                ...l,
+                ...('name' in data && data.name !== undefined ? { name: data.name.trim() || l.name } : {}),
+                ...('endDate' in data && data.endDate !== undefined ? { endDate: data.endDate.slice(0, 10) } : {}),
+                ...('interestAnnualPercent' in data ? { interestAnnualPercent: data.interestAnnualPercent } : {}),
+                updatedAt: t,
+              }
+            : l,
+        ),
+      }))
+      notifyPortfolios()
+      const d = getWealthDocument()
+      const l = d.propertyLoans.find((x) => x.id === loanId && x.propertyId === propertyId)
+      if (!l) return rej(404, 'Not found')
+      const prop = d.properties.find((p) => p.id === propertyId)
+      return Promise.resolve({ ...l, property: prop ? { id: prop.id, name: prop.name } : undefined } as PropertyLoan)
+    },
+    deleteLoan: (propertyId: string, loanId: string): Promise<void> => {
+      updateWealthDocument((d) => ({
+        ...d,
+        propertyLoans: d.propertyLoans.filter((l) => !(l.id === loanId && l.propertyId === propertyId)),
+        propertyMortgages: d.propertyMortgages.filter((m) => !(m.propertyId === propertyId && m.loanId === loanId)),
+      }))
+      notifyPortfolios()
+      return Promise.resolve()
+    },
+    listMortgageEntries: (propertyId: string, loanId?: string | null): Promise<PropertyMortgageEntry[]> => {
+      const d = getWealthDocument()
+      let rows = d.propertyMortgages.filter((m) => m.propertyId === propertyId)
+      if (loanId !== undefined && loanId !== null && loanId !== '') {
+        rows = rows.filter((m) => m.loanId === loanId)
+      }
+      rows = [...rows].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      return Promise.resolve(
+        rows.map((m) => {
+          const prop = d.properties.find((p) => p.id === propertyId)
+          return { ...m, property: prop ? { id: prop.id, name: prop.name } : undefined } as PropertyMortgageEntry
+        }),
       )
     },
     createMortgageEntry: (
       propertyId: string,
-      data: { date: string; outstandingBalance: number; currency?: string; loanName?: string | null },
+      data: {
+        date: string
+        outstandingBalance: number
+        currency?: string
+        loanName?: string | null
+        loanId?: string | null
+        principalMonthlyPayment?: number | null
+        interestMonthlyPayment?: number | null
+      },
     ): Promise<PropertyMortgageEntry> => {
       const { createdAt, updatedAt } = newEntityTimestamps()
       const row = {
@@ -412,16 +531,32 @@ export const api = {
         outstandingBalance: data.outstandingBalance,
         currency: data.currency ?? 'EUR',
         loanName: data.loanName ?? null,
+        loanId: data.loanId ?? null,
+        ...(data.principalMonthlyPayment !== undefined || data.interestMonthlyPayment !== undefined
+          ? {
+              principalMonthlyPayment: data.principalMonthlyPayment ?? 0,
+              interestMonthlyPayment: data.interestMonthlyPayment ?? 0,
+            }
+          : {}),
         createdAt,
         updatedAt,
       }
       updateWealthDocument((d) => ({ ...d, propertyMortgages: [...d.propertyMortgages, row] }))
+      notifyPortfolios()
       return Promise.resolve({ ...row } as PropertyMortgageEntry)
     },
     updateMortgageEntry: (
       propertyId: string,
       entryId: string,
-      data: Partial<{ date: string; outstandingBalance: number; currency: string; loanName: string | null }>,
+      data: Partial<{
+        date: string
+        outstandingBalance: number
+        currency: string
+        loanName: string | null
+        loanId: string | null
+        principalMonthlyPayment: number | null
+        interestMonthlyPayment: number | null
+      }>,
     ): Promise<PropertyMortgageEntry> => {
       const t = nowIso()
       updateWealthDocument((d) => ({
@@ -430,6 +565,7 @@ export const api = {
           m.id === entryId && m.propertyId === propertyId ? { ...m, ...data, updatedAt: t } : m,
         ),
       }))
+      notifyPortfolios()
       const d = getWealthDocument()
       const m = d.propertyMortgages.find((x) => x.id === entryId)
       if (!m) return rej(404, 'Not found')
@@ -440,6 +576,7 @@ export const api = {
         ...d,
         propertyMortgages: d.propertyMortgages.filter((m) => !(m.id === entryId && m.propertyId === propertyId)),
       }))
+      notifyPortfolios()
       return Promise.resolve()
     },
     listExpenses: (propertyId: string): Promise<PropertyExpense[]> => {
@@ -497,7 +634,7 @@ export const api = {
     },
     listRentPeriods: (propertyId: string): Promise<PropertyRentPeriod[]> => {
       const d = getWealthDocument()
-      const rows = d.propertyRentPeriods
+      const rows = (d.propertyRentPeriods ?? [])
         .filter((r) => r.propertyId === propertyId)
         .sort((a, b) => rentPeriodDateYmd(b.startDate).localeCompare(rentPeriodDateYmd(a.startDate)))
       return Promise.resolve(
@@ -542,11 +679,11 @@ export const api = {
         updatedAt,
       }
       const touch = nowIso()
-      const periodsAdjusted = withOpenRentPeriodsClosedBeforeStart(d0.propertyRentPeriods, propertyId, startYmd, touch)
+      const periodsAdjusted = withOpenRentPeriodsClosedBeforeStart(d0.propertyRentPeriods ?? [], propertyId, startYmd, touch)
       assertRentPeriodNoOverlap({ ...d0, propertyRentPeriods: periodsAdjusted }, row)
       updateWealthDocument((d) => ({
         ...d,
-        propertyRentPeriods: [...withOpenRentPeriodsClosedBeforeStart(d.propertyRentPeriods, propertyId, startYmd, touch), row],
+        propertyRentPeriods: [...withOpenRentPeriodsClosedBeforeStart(d.propertyRentPeriods ?? [], propertyId, startYmd, touch), row],
       }))
       notifyPortfolios()
       const prop = d0.properties.find((p) => p.id === propertyId)
@@ -565,7 +702,7 @@ export const api = {
       }>,
     ): Promise<PropertyRentPeriod> => {
       const d0 = getWealthDocument()
-      const prev = d0.propertyRentPeriods.find((r) => r.id === periodId && r.propertyId === propertyId)
+      const prev = (d0.propertyRentPeriods ?? []).find((r) => r.id === periodId && r.propertyId === propertyId)
       if (!prev) return rej(404, 'Not found')
       const t = nowIso()
       const startYmd = data.startDate !== undefined ? rentPeriodDateYmd(data.startDate) : rentPeriodDateYmd(prev.startDate)
@@ -593,17 +730,17 @@ export const api = {
         notes: data.notes !== undefined ? (data.notes?.trim() ? data.notes.trim() : null) : prev.notes,
         updatedAt: t,
       }
-      const base = d0.propertyRentPeriods.filter((r) => !(r.id === periodId && r.propertyId === propertyId))
+      const base = (d0.propertyRentPeriods ?? []).filter((r) => !(r.id === periodId && r.propertyId === propertyId))
       const periodsAdjusted = withOpenRentPeriodsClosedBeforeStart(base, propertyId, startYmd, t)
       assertRentPeriodNoOverlap({ ...d0, propertyRentPeriods: periodsAdjusted }, candidate, periodId)
       updateWealthDocument((d) => {
-        const base0 = d.propertyRentPeriods.filter((r) => !(r.id === periodId && r.propertyId === propertyId))
+        const base0 = (d.propertyRentPeriods ?? []).filter((r) => !(r.id === periodId && r.propertyId === propertyId))
         const adj = withOpenRentPeriodsClosedBeforeStart(base0, propertyId, startYmd, t)
         return { ...d, propertyRentPeriods: [...adj, candidate] }
       })
       notifyPortfolios()
       const d = getWealthDocument()
-      const out = d.propertyRentPeriods.find((x) => x.id === periodId)
+      const out = (d.propertyRentPeriods ?? []).find((x) => x.id === periodId)
       if (!out) return rej(404, 'Not found')
       const prop = d.properties.find((p) => p.id === propertyId)
       return Promise.resolve({ ...out, property: prop ? { id: prop.id, name: prop.name } : undefined } as PropertyRentPeriod)
@@ -611,7 +748,7 @@ export const api = {
     deleteRentPeriod: (propertyId: string, periodId: string): Promise<void> => {
       updateWealthDocument((d) => ({
         ...d,
-        propertyRentPeriods: d.propertyRentPeriods.filter((r) => !(r.id === periodId && r.propertyId === propertyId)),
+        propertyRentPeriods: (d.propertyRentPeriods ?? []).filter((r) => !(r.id === periodId && r.propertyId === propertyId)),
       }))
       notifyPortfolios()
       return Promise.resolve()
@@ -674,9 +811,10 @@ export const api = {
           liabilities: d.liabilities.filter((l) => !l.assetGroupId || !groupIds.includes(l.assetGroupId)),
           properties: d.properties.filter((p) => !groupIds.includes(p.assetGroupId)),
           propertyValuations: d.propertyValuations.filter((v) => !propertyIds.includes(v.propertyId)),
+          propertyLoans: d.propertyLoans.filter((l) => !propertyIds.includes(l.propertyId)),
           propertyMortgages: d.propertyMortgages.filter((m) => !propertyIds.includes(m.propertyId)),
           propertyExpenses: d.propertyExpenses.filter((e) => !propertyIds.includes(e.propertyId)),
-          propertyRentPeriods: d.propertyRentPeriods.filter((r) => !propertyIds.includes(r.propertyId)),
+          propertyRentPeriods: (d.propertyRentPeriods ?? []).filter((r) => !propertyIds.includes(r.propertyId)),
           assetValuations: d.assetValuations.filter((v) => !assetIds.includes(v.assetId)),
           securityTransactions: d.securityTransactions.filter((t) => !groupIds.includes(t.assetGroupId)),
           securityValuations: d.securityValuations.filter((v) => !assetIds.includes(v.assetId)),
@@ -745,9 +883,10 @@ export const api = {
           liabilities: d.liabilities.filter((l) => l.assetGroupId !== id),
           properties: d.properties.filter((p) => p.assetGroupId !== id),
           propertyValuations: d.propertyValuations.filter((v) => !propertyIds.includes(v.propertyId)),
+          propertyLoans: d.propertyLoans.filter((l) => !propertyIds.includes(l.propertyId)),
           propertyMortgages: d.propertyMortgages.filter((m) => !propertyIds.includes(m.propertyId)),
           propertyExpenses: d.propertyExpenses.filter((e) => !propertyIds.includes(e.propertyId)),
-          propertyRentPeriods: d.propertyRentPeriods.filter((r) => !propertyIds.includes(r.propertyId)),
+          propertyRentPeriods: (d.propertyRentPeriods ?? []).filter((r) => !propertyIds.includes(r.propertyId)),
           assetValuations: d.assetValuations.filter((v) => !assetIds.includes(v.assetId)),
           securityTransactions: d.securityTransactions.filter((t) => t.assetGroupId !== id),
           securityValuations: d.securityValuations.filter((v) => !assetIds.includes(v.assetId)),
@@ -822,6 +961,7 @@ export const api = {
                   date: new Date(m.date),
                   outstandingBalance: m.outstandingBalance,
                   currency: m.currency,
+                  loanId: m.loanId,
                 })),
             })),
           },
