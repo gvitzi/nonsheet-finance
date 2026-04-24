@@ -123,6 +123,21 @@ export type PropertyExpenseRecord = {
   updatedAt: string
 }
 
+/** One rent contract window for a property (calendar inclusive start/end). */
+export type PropertyRentPeriodRecord = {
+  id: string
+  propertyId: string
+  startDate: string
+  /** When null/omitted, period is open-ended (still active). */
+  endDate?: string | null
+  rent: number
+  hausgeld: number
+  tenantNames: string[]
+  notes?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export type AssetValuationRecord = {
   id: string
   assetId: string
@@ -193,6 +208,7 @@ export type WealthDocument = {
   propertyValuations: PropertyValuationRecord[]
   propertyMortgages: PropertyMortgageRecord[]
   propertyExpenses: PropertyExpenseRecord[]
+  propertyRentPeriods: PropertyRentPeriodRecord[]
   assetValuations: AssetValuationRecord[]
   securityTransactions: SecurityTransactionRecord[]
   securityInfo: SecurityInfoRecord[]
@@ -400,6 +416,44 @@ function parsePropertyExpense(o: unknown): PropertyExpenseRecord {
   }
 }
 
+function parseTenantNamesField(o: Record<string, unknown>): string[] {
+  const raw = o.tenantNames
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((x): x is string => typeof x === 'string')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+}
+
+function parsePropertyRentPeriod(o: unknown): PropertyRentPeriodRecord {
+  if (!isObj(o)) throw new WealthDocumentParseError('propertyRentPeriod item')
+  const endRaw = optStr(o, 'endDate')
+  const endDate = endRaw != null && endRaw.trim() !== '' ? endRaw.trim().slice(0, 10) : null
+  const startYmd = reqStr(o, 'startDate').slice(0, 10)
+  if (endDate != null && endDate < startYmd) {
+    throw new WealthDocumentParseError('propertyRentPeriod.endDate must be on or after startDate')
+  }
+  const hg = o.hausgeld
+  const hausgeld =
+    typeof hg === 'number' && !Number.isNaN(hg) ? hg : typeof hg === 'string' && hg.trim() ? Number(hg) : 0
+  const rent = reqNum(o, 'rent')
+  if (rent < 0) throw new WealthDocumentParseError('propertyRentPeriod.rent must be >= 0')
+  const h = Number.isFinite(hausgeld) ? hausgeld : 0
+  if (h < 0) throw new WealthDocumentParseError('propertyRentPeriod.hausgeld must be >= 0')
+  return {
+    id: reqStr(o, 'id'),
+    propertyId: reqStr(o, 'propertyId'),
+    startDate: startYmd,
+    endDate,
+    rent,
+    hausgeld: h,
+    tenantNames: parseTenantNamesField(o),
+    notes: optStr(o, 'notes'),
+    createdAt: reqStr(o, 'createdAt'),
+    updatedAt: reqStr(o, 'updatedAt'),
+  }
+}
+
 function parseAssetValuation(o: unknown): AssetValuationRecord {
   if (!isObj(o)) throw new WealthDocumentParseError('assetValuation item')
   return {
@@ -525,6 +579,9 @@ export function parseWealthDocument(json: unknown): WealthDocument {
       : [],
     propertyExpenses: json.propertyExpenses !== undefined
       ? parseArr(json.propertyExpenses, 'propertyExpenses', parsePropertyExpense)
+      : [],
+    propertyRentPeriods: json.propertyRentPeriods !== undefined
+      ? parseArr(json.propertyRentPeriods, 'propertyRentPeriods', parsePropertyRentPeriod)
       : [],
     assetValuations: json.assetValuations !== undefined ? parseArr(json.assetValuations, 'assetValuations', parseAssetValuation) : [],
     securityTransactions: parseArr(json.securityTransactions, 'securityTransactions', parseSecurityTransaction),
@@ -711,6 +768,7 @@ export function createEmptyWealthDocument(): WealthDocument {
     propertyValuations: [],
     propertyMortgages: [],
     propertyExpenses: [],
+    propertyRentPeriods: [],
     assetValuations: [],
     securityTransactions: [],
     securityInfo: [],

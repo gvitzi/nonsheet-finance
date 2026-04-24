@@ -50,8 +50,13 @@ export interface Property {
   description?: string | null
   notes?: string | null
   address?: string | null
+  /** Legacy stored field; not used for display. Use `effectiveMonthlyRent` from rent periods. */
   monthlyRent?: number | null
   monthlyMortgagePayment?: number | null
+  /** Base monthly rent from the rent period active today (0 if none). */
+  effectiveMonthlyRent: number
+  /** Hausgeld from the rent period active today (0 if none). */
+  effectiveMonthlyHausgeld: number
   monthlyCashflow?: number | null
   archivedAt?: string | null
   assetGroup?: { id: string; name: string; kind: string }
@@ -89,6 +94,20 @@ export interface PropertyExpense {
   name: string
   description?: string | null
   amount: number
+  property?: { id: string; name: string }
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PropertyRentPeriod {
+  id: string
+  propertyId: string
+  startDate: string
+  endDate?: string | null
+  rent: number
+  hausgeld: number
+  tenantNames: string[]
+  notes?: string | null
   property?: { id: string; name: string }
   createdAt: string
   updatedAt: string

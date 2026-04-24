@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type SyntheticEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ApiError, api } from '../api'
-import type { Property, PropertyExpense, PropertyMortgageEntry, PropertyValuation } from '../api'
+import type { Property, PropertyExpense, PropertyMortgageEntry, PropertyRentPeriod, PropertyValuation } from '../api'
 import { assetGroupHubPath } from '../portfolioPaths'
 
 const fmt = (n: number, currency = 'EUR') =>
@@ -18,6 +18,20 @@ function dateInputFromIso(iso: string) {
   return d.length === 10 ? d : ''
 }
 
+function tenantNamesFromInput(s: string): string[] {
+  return s.split(/[,;]/).map((x) => x.trim()).filter(Boolean)
+}
+
+function tenantNamesToInput(names: string[]): string {
+  return names.join(', ')
+}
+
+function notesPreview(s: string | null | undefined, maxLen: number) {
+  const t = (s ?? '').trim()
+  if (!t) return '—'
+  return t.length <= maxLen ? t : `${t.slice(0, maxLen)}…`
+}
+
 type Props = {
   portfolioId: string
   assetGroupId: string
@@ -28,8 +42,9 @@ type Props = {
 const valuationEmpty = { date: '', value: '', currency: 'EUR' }
 const expenseEmpty = { date: '', name: '', description: '', amount: '' }
 const mortgageEmpty = { date: '', outstandingBalance: '', currency: 'EUR', loanName: '' }
+const rentPeriodEmpty = { startDate: '', endDate: '', rent: '', hausgeld: '0', tenantNames: '', notes: '' }
 
-type PropertyAccordionSection = 'valuations' | 'expenses' | 'mortgages'
+type PropertyAccordionSection = 'valuations' | 'expenses' | 'mortgages' | 'rentPeriods'
 
 export default function RealEstatePropertyView({ portfolioId, assetGroupId, propertyId, groupName }: Props) {
   const navigate = useNavigate()
@@ -37,6 +52,7 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
   const [valuations, setValuations] = useState<PropertyValuation[]>([])
   const [expenses, setExpenses] = useState<PropertyExpense[]>([])
   const [mortgages, setMortgages] = useState<PropertyMortgageEntry[]>([])
+  const [rentPeriods, setRentPeriods] = useState<PropertyRentPeriod[]>([])
   const [loading, setLoading] = useState(true)
   const [banner, setBanner] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
@@ -45,7 +61,6 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
     description: '',
     notes: '',
     address: '',
-    monthlyRent: '',
     monthlyMortgagePayment: '',
   })
   const [metaSaving, setMetaSaving] = useState(false)
@@ -70,11 +85,16 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
   const [mEditing, setMEditing] = useState<PropertyMortgageEntry | null>(null)
   const [mSaving, setMSaving] = useState(false)
 
+  const [rpForm, setRpForm] = useState(rentPeriodEmpty)
+  const [rpEditing, setRpEditing] = useState<PropertyRentPeriod | null>(null)
+  const [rpSaving, setRpSaving] = useState(false)
+
   const [openAccordionSection, setOpenAccordionSection] = useState<PropertyAccordionSection | null>('valuations')
 
   const [selectedValuationId, setSelectedValuationId] = useState<string | null>(null)
   const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null)
   const [selectedMortgageId, setSelectedMortgageId] = useState<string | null>(null)
+  const [selectedRentPeriodId, setSelectedRentPeriodId] = useState<string | null>(null)
 
   const onAccordionToggle = useCallback((section: PropertyAccordionSection, e: SyntheticEvent<HTMLDetailsElement>) => {
     const el = e.currentTarget
@@ -86,11 +106,12 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
     setLoading(true)
     setBanner(null)
     try {
-      const [p, v, e, m] = await Promise.all([
+      const [p, v, e, m, rp] = await Promise.all([
         api.properties.get(propertyId),
         api.properties.listValuations(propertyId),
         api.properties.listExpenses(propertyId),
         api.properties.listMortgageEntries(propertyId),
+        api.properties.listRentPeriods(propertyId),
       ])
       setProperty(p)
       setMetaForm({
@@ -98,16 +119,19 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
         description: p.description ?? '',
         notes: p.notes ?? '',
         address: p.address ?? '',
-        monthlyRent: p.monthlyRent != null && !Number.isNaN(p.monthlyRent) ? String(p.monthlyRent) : '',
         monthlyMortgagePayment:
           p.monthlyMortgagePayment != null && !Number.isNaN(p.monthlyMortgagePayment) ? String(p.monthlyMortgagePayment) : '',
       })
       setValuations(v)
       setExpenses(e)
       setMortgages(m)
+      setRentPeriods(rp)
+      setRpForm(rentPeriodEmpty)
+      setRpEditing(null)
       setSelectedValuationId(null)
       setSelectedExpenseId(null)
       setSelectedMortgageId(null)
+      setSelectedRentPeriodId(null)
     } catch {
       setProperty(null)
       setBanner({ type: 'err', text: 'Property not found.' })
@@ -154,6 +178,13 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
     }
   }, [selectedMortgageId, mEditing])
 
+  useEffect(() => {
+    if (rpEditing && selectedRentPeriodId !== rpEditing.id) {
+      setRpEditing(null)
+      setRpForm(rentPeriodEmpty)
+    }
+  }, [selectedRentPeriodId, rpEditing])
+
   const propertyLabel = property?.name ?? 'Property'
 
   const latestValuation = useMemo(() => {
@@ -174,18 +205,15 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
   }
 
   const derivedMonthlyCashflow = useMemo(() => {
-    const r = parseOptionalMoney(metaForm.monthlyRent)
+    if (!property) return null
+    const r = property.effectiveMonthlyRent + property.effectiveMonthlyHausgeld
     const m = parseOptionalMoney(metaForm.monthlyMortgagePayment)
-    if (r === null && m === null) return null
-    return (r ?? 0) - (m ?? 0)
-  }, [metaForm.monthlyRent, metaForm.monthlyMortgagePayment])
+    return r - (m ?? 0)
+  }, [property, metaForm.monthlyMortgagePayment])
 
   const savedMonthlyCashflow = useMemo(() => {
     if (!property) return null
-    const r = property.monthlyRent
-    const m = property.monthlyMortgagePayment
-    if (r == null && m == null) return null
-    return (r ?? 0) - (m ?? 0)
+    return property.monthlyCashflow ?? null
   }, [property])
 
   const cancelDetailsEdit = useCallback(() => {
@@ -195,7 +223,6 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
       description: property.description ?? '',
       notes: property.notes ?? '',
       address: property.address ?? '',
-      monthlyRent: property.monthlyRent != null && !Number.isNaN(property.monthlyRent) ? String(property.monthlyRent) : '',
       monthlyMortgagePayment:
         property.monthlyMortgagePayment != null && !Number.isNaN(property.monthlyMortgagePayment)
           ? String(property.monthlyMortgagePayment)
@@ -210,12 +237,10 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
       setBanner({ type: 'err', text: 'Name is required.' })
       return
     }
-    for (const key of ['monthlyRent', 'monthlyMortgagePayment'] as const) {
-      const t = metaForm[key].trim()
-      if (t && Number.isNaN(Number(t))) {
-        setBanner({ type: 'err', text: 'Monthly amounts must be valid numbers when provided.' })
-        return
-      }
+    const mt = metaForm.monthlyMortgagePayment.trim()
+    if (mt && Number.isNaN(Number(mt))) {
+      setBanner({ type: 'err', text: 'Mortgage payment must be a valid number when provided.' })
+      return
     }
     setMetaSaving(true)
     setBanner(null)
@@ -225,7 +250,6 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
         description: metaForm.description.trim() || null,
         notes: metaForm.notes.trim() || null,
         address: metaForm.address.trim() || null,
-        monthlyRent: parseOptionalMoney(metaForm.monthlyRent),
         monthlyMortgagePayment: parseOptionalMoney(metaForm.monthlyMortgagePayment),
       })
       setProperty(p)
@@ -239,7 +263,7 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
   }
 
   const delProperty = async () => {
-    if (!confirm('Delete this property and all valuations, expenses, and mortgage rows?')) return
+    if (!confirm('Delete this property and all valuations, expenses, mortgage rows, and rent periods?')) return
     try {
       await api.properties.delete(propertyId)
       navigate(assetGroupHubPath(portfolioId, assetGroupId))
@@ -377,6 +401,62 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
     }
   }
 
+  const rpValidation = useMemo(() => {
+    if (!rpForm.startDate) return 'Start date is required.'
+    const rentN = Number(rpForm.rent)
+    if (rpForm.rent.trim() === '' || Number.isNaN(rentN) || rentN < 0) return 'Rent must be a non-negative number.'
+    const hg = rpForm.hausgeld.trim() === '' ? 0 : Number(rpForm.hausgeld)
+    if (Number.isNaN(hg) || hg < 0) return 'Hausgeld must be a non-negative number.'
+    if (rpForm.endDate.trim() && rpForm.endDate < rpForm.startDate) return 'End date must be on or after start date.'
+    return null
+  }, [rpForm])
+
+  const saveRentPeriod = async () => {
+    if (rpValidation) {
+      setBanner({ type: 'err', text: rpValidation })
+      return
+    }
+    setRpSaving(true)
+    setBanner(null)
+    try {
+      const startIso = new Date(rpForm.startDate + 'T12:00:00').toISOString()
+      const endPart = rpForm.endDate.trim()
+        ? { endDate: new Date(rpForm.endDate + 'T12:00:00').toISOString() }
+        : { endDate: null as string | null }
+      const rent = parseFloat(rpForm.rent)
+      const hausgeld = rpForm.hausgeld.trim() === '' ? 0 : parseFloat(rpForm.hausgeld)
+      const body = {
+        startDate: startIso,
+        ...endPart,
+        rent,
+        hausgeld,
+        tenantNames: tenantNamesFromInput(rpForm.tenantNames),
+        notes: rpForm.notes.trim() || null,
+      }
+      if (rpEditing) await api.properties.updateRentPeriod(propertyId, rpEditing.id, body)
+      else await api.properties.createRentPeriod(propertyId, body)
+      setRpForm(rentPeriodEmpty)
+      setRpEditing(null)
+      setSelectedRentPeriodId(null)
+      setBanner({ type: 'ok', text: rpEditing ? 'Rent period updated.' : 'Rent period added.' })
+      load()
+    } catch (e: unknown) {
+      setBanner({ type: 'err', text: err(e, 'Failed to save rent period.') })
+    } finally {
+      setRpSaving(false)
+    }
+  }
+
+  const delRentPeriod = async (id: string) => {
+    if (!confirm('Delete this rent period?')) return
+    try {
+      await api.properties.deleteRentPeriod(propertyId, id)
+      load()
+    } catch (e: unknown) {
+      setBanner({ type: 'err', text: err(e, 'Failed to delete.') })
+    }
+  }
+
   if (loading) return <div className="page-loading">Loading property…</div>
   if (!property) return <div className="page-error">{banner?.text ?? 'Property not found.'}</div>
 
@@ -442,8 +522,9 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
               <div className="span-2 property-details-section__fin-intro">
                 <h3 className="property-details-section__fin-title">Financial summary</h3>
                 <p className="page-subtitle property-details-section__fin-copy">
-                  Value and liabilities follow the latest dated row in the valuation and mortgage tables below. Net cashflow is
-                  rent minus mortgage payment (EUR).
+                  Value and liabilities follow the latest dated row in the valuation and mortgage tables below. Rent and Hausgeld
+                  follow the rent period that contains today (see Rent periods). Net cashflow is rent plus Hausgeld minus mortgage
+                  payment (EUR).
                 </p>
               </div>
               <label>
@@ -464,12 +545,11 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
               </label>
               <label>
                 Rent (monthly)
-                <input
-                  type="number"
-                  step="0.01"
-                  value={metaForm.monthlyRent}
-                  onChange={(e) => setMetaForm((f) => ({ ...f, monthlyRent: e.target.value }))}
-                />
+                <input readOnly className="input-readonly" value={fmt(property.effectiveMonthlyRent, 'EUR')} title="From rent period active today" />
+              </label>
+              <label>
+                Hausgeld (monthly)
+                <input readOnly className="input-readonly" value={fmt(property.effectiveMonthlyHausgeld, 'EUR')} title="From rent period active today" />
               </label>
               <label>
                 Mortgage monthly payment
@@ -486,7 +566,7 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
                   readOnly
                   value={derivedMonthlyCashflow === null ? '—' : fmt(derivedMonthlyCashflow, 'EUR')}
                   className="input-readonly"
-                  title="Rent minus mortgage payment"
+                  title="Rent plus Hausgeld minus mortgage payment"
                 />
               </label>
             </div>
@@ -528,8 +608,8 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
             <div className="property-details-read__fin">
               <h3 className="property-details-section__fin-title">Financial summary</h3>
               <p className="page-subtitle property-details-section__fin-copy">
-                Value and liabilities follow the latest dated row in the valuation and mortgage tables below. Net cashflow is
-                rent minus mortgage payment (EUR).
+                Value and liabilities follow the latest dated row in the valuation and mortgage tables below. Rent and Hausgeld
+                follow the rent period that contains today. Net cashflow is rent plus Hausgeld minus mortgage payment (EUR).
               </p>
               <div className="property-details-read__stats">
                 <div className="property-details-read__stat">
@@ -557,11 +637,11 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
                 </div>
                 <div className="property-details-read__stat">
                   <div className="label">Rent (monthly)</div>
-                  <div className="property-details-read__stat-value">
-                    {property.monthlyRent != null && !Number.isNaN(property.monthlyRent)
-                      ? fmt(property.monthlyRent, 'EUR')
-                      : '—'}
-                  </div>
+                  <div className="property-details-read__stat-value">{fmt(property.effectiveMonthlyRent, 'EUR')}</div>
+                </div>
+                <div className="property-details-read__stat">
+                  <div className="label">Hausgeld (monthly)</div>
+                  <div className="property-details-read__stat-value">{fmt(property.effectiveMonthlyHausgeld, 'EUR')}</div>
                 </div>
                 <div className="property-details-read__stat">
                   <div className="label">Mortgage payment (monthly)</div>
@@ -916,6 +996,204 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
             </div>
           </>
         )}
+          </div>
+        </details>
+
+        <details
+          className="property-accordion"
+          open={openAccordionSection === 'rentPeriods'}
+          onToggle={(e) => onAccordionToggle('rentPeriods', e)}
+        >
+          <summary className="property-accordion__summary">
+            <span className="property-accordion__title">Rent periods</span>
+          </summary>
+          <div className="property-accordion__body stack">
+            <p className="page-subtitle">
+              Contract windows: base rent, Hausgeld, tenants, and optional end date. Open end = leave end date empty. The period
+              that contains today drives the rent and Hausgeld shown in Details above.
+            </p>
+
+            <div className="form-panel">
+              <h3>{rpEditing ? 'Edit rent period' : 'Add rent period'}</h3>
+              <div className="form-grid">
+                <label>
+                  Start date *
+                  <input type="date" value={rpForm.startDate} onChange={(e) => setRpForm((f) => ({ ...f, startDate: e.target.value }))} />
+                </label>
+                <label>
+                  End date (optional)
+                  <input type="date" value={rpForm.endDate} onChange={(e) => setRpForm((f) => ({ ...f, endDate: e.target.value }))} />
+                </label>
+                <label>
+                  Rent (monthly) *
+                  <input type="number" step="0.01" value={rpForm.rent} onChange={(e) => setRpForm((f) => ({ ...f, rent: e.target.value }))} />
+                </label>
+                <label>
+                  Hausgeld (monthly)
+                  <input type="number" step="0.01" value={rpForm.hausgeld} onChange={(e) => setRpForm((f) => ({ ...f, hausgeld: e.target.value }))} />
+                </label>
+                <label className="span-2">
+                  Tenants (comma-separated names)
+                  <input value={rpForm.tenantNames} onChange={(e) => setRpForm((f) => ({ ...f, tenantNames: e.target.value }))} />
+                </label>
+                <label className="span-2">
+                  Notes
+                  <textarea rows={3} value={rpForm.notes} onChange={(e) => setRpForm((f) => ({ ...f, notes: e.target.value }))} />
+                </label>
+              </div>
+              {rpValidation ? <p className="inline-hint inline-error">{rpValidation}</p> : null}
+              <div className="form-actions">
+                {rpEditing ? (
+                  <button
+                    className="btn"
+                    type="button"
+                    onClick={() => {
+                      setRpEditing(null)
+                      setRpForm(rentPeriodEmpty)
+                    }}
+                  >
+                    Cancel edit
+                  </button>
+                ) : null}
+                <button className="btn btn-primary" type="button" onClick={() => void saveRentPeriod()} disabled={Boolean(rpValidation) || rpSaving}>
+                  {rpSaving ? 'Saving…' : rpEditing ? 'Update period' : 'Add period'}
+                </button>
+              </div>
+            </div>
+
+            {rentPeriods.length === 0 ? (
+              <div className="empty-state">No rent periods yet.</div>
+            ) : (
+              <>
+                {selectedRentPeriodId ? (
+                  <div className="property-table-toolbar rent-period-table-toolbar rent-period-table-toolbar--desktop">
+                    <div className="property-table-toolbar__actions">
+                      <button
+                        className="btn btn-sm"
+                        type="button"
+                        onClick={() => {
+                          const r = rentPeriods.find((x) => x.id === selectedRentPeriodId)
+                          if (!r) return
+                          setRpEditing(r)
+                          setRpForm({
+                            startDate: dateInputFromIso(r.startDate),
+                            endDate: r.endDate ? dateInputFromIso(r.endDate) : '',
+                            rent: String(r.rent),
+                            hausgeld: String(r.hausgeld),
+                            tenantNames: tenantNamesToInput(r.tenantNames),
+                            notes: r.notes ?? '',
+                          })
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button className="btn btn-sm btn-danger" type="button" onClick={() => void delRentPeriod(selectedRentPeriodId)}>
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="rent-period-cards" role="list" aria-label="Rent periods">
+                  {rentPeriods.map((r) => (
+                    <article
+                      key={r.id}
+                      className={`rent-period-card${selectedRentPeriodId === r.id ? ' rent-period-card--selected' : ''}`}
+                      role="listitem"
+                      tabIndex={0}
+                      onClick={() => setSelectedRentPeriodId((prev) => (prev === r.id ? null : r.id))}
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter' && e.key !== ' ') return
+                        e.preventDefault()
+                        setSelectedRentPeriodId((prev) => (prev === r.id ? null : r.id))
+                      }}
+                    >
+                      <div className="rent-period-card__head">
+                        <span className="rent-period-card__dates">
+                          {new Date(r.startDate).toLocaleDateString()}
+                          {' → '}
+                          {r.endDate ? new Date(r.endDate).toLocaleDateString() : 'Open'}
+                        </span>
+                      </div>
+                      <dl className="rent-period-card__dl">
+                        <dt className="rent-period-card__dt">Rent</dt>
+                        <dd className="rent-period-card__dd">{fmt(r.rent, 'EUR')}</dd>
+                        <dt className="rent-period-card__dt">Hausgeld</dt>
+                        <dd className="rent-period-card__dd">{fmt(r.hausgeld, 'EUR')}</dd>
+                        <dt className="rent-period-card__dt">Tenants</dt>
+                        <dd className="rent-period-card__dd">{r.tenantNames.length ? r.tenantNames.join(', ') : '—'}</dd>
+                        <dt className="rent-period-card__dt">Notes</dt>
+                        <dd className="rent-period-card__dd">{r.notes?.trim() ? r.notes : '—'}</dd>
+                      </dl>
+                      {selectedRentPeriodId === r.id ? (
+                        <div className="rent-period-card__actions">
+                          <button
+                            className="btn btn-sm"
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setSelectedRentPeriodId(r.id)
+                              setRpEditing(r)
+                              setRpForm({
+                                startDate: dateInputFromIso(r.startDate),
+                                endDate: r.endDate ? dateInputFromIso(r.endDate) : '',
+                                rent: String(r.rent),
+                                hausgeld: String(r.hausgeld),
+                                tenantNames: tenantNamesToInput(r.tenantNames),
+                                notes: r.notes ?? '',
+                              })
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button className="btn btn-sm btn-danger" type="button" onClick={(e) => { e.stopPropagation(); void delRentPeriod(r.id) }}>
+                            Delete
+                          </button>
+                        </div>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
+
+                <div className="rent-period-table-wrap property-table-scroll">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Start</th>
+                        <th>End</th>
+                        <th>Rent</th>
+                        <th>Hausgeld</th>
+                        <th>Tenants</th>
+                        <th>Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rentPeriods.map((r) => (
+                        <tr
+                          key={r.id}
+                          className={`property-table-row--selectable${selectedRentPeriodId === r.id ? ' property-table-row--selected' : ''}`}
+                          tabIndex={0}
+                          aria-selected={selectedRentPeriodId === r.id}
+                          onClick={() => setSelectedRentPeriodId((prev) => (prev === r.id ? null : r.id))}
+                          onKeyDown={(e) => {
+                            if (e.key !== 'Enter' && e.key !== ' ') return
+                            e.preventDefault()
+                            setSelectedRentPeriodId((prev) => (prev === r.id ? null : r.id))
+                          }}
+                        >
+                          <td>{new Date(r.startDate).toLocaleDateString()}</td>
+                          <td>{r.endDate ? new Date(r.endDate).toLocaleDateString() : 'Open'}</td>
+                          <td className="positive">{fmt(r.rent, 'EUR')}</td>
+                          <td>{fmt(r.hausgeld, 'EUR')}</td>
+                          <td>{r.tenantNames.length ? r.tenantNames.join(', ') : '—'}</td>
+                          <td>{notesPreview(r.notes, 48)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </div>
         </details>
       </div>
