@@ -54,6 +54,13 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
   const [vForm, setVForm] = useState(valuationEmpty)
   const [vEditing, setVEditing] = useState<PropertyValuation | null>(null)
   const [vSaving, setVSaving] = useState(false)
+  const [valuationModalOpen, setValuationModalOpen] = useState(false)
+
+  const closeValuationModal = useCallback(() => {
+    setValuationModalOpen(false)
+    setVEditing(null)
+    setVForm(valuationEmpty)
+  }, [])
 
   const [eForm, setEForm] = useState(expenseEmpty)
   const [eEditing, setEEditing] = useState<PropertyExpense | null>(null)
@@ -117,8 +124,21 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
     if (vEditing && selectedValuationId !== vEditing.id) {
       setVEditing(null)
       setVForm(valuationEmpty)
+      setValuationModalOpen(false)
     }
   }, [selectedValuationId, vEditing])
+
+  useEffect(() => {
+    if (!valuationModalOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        closeValuationModal()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [valuationModalOpen, closeValuationModal])
 
   useEffect(() => {
     if (eEditing && selectedExpenseId !== eEditing.id) {
@@ -248,6 +268,7 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
       else await api.properties.createValuation(propertyId, body)
       setVForm(valuationEmpty)
       setVEditing(null)
+      setValuationModalOpen(false)
       setBanner({ type: 'ok', text: vEditing ? 'Valuation updated.' : 'Valuation added.' })
       load()
     } catch (e: unknown) {
@@ -578,44 +599,19 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
           <div className="property-accordion__body stack">
         <p className="page-subtitle">Date and value for this property.</p>
 
-        <div className="form-panel">
-          <h3>{vEditing ? 'Edit valuation' : 'Add valuation'}</h3>
-          <div className="form-grid">
-            <label>
-              Date *
-              <input
-                type="date"
-                value={vForm.date}
-                onChange={(e) => setVForm((f) => ({ ...f, date: e.target.value }))}
-              />
-            </label>
-            <label>
-              Value *
-              <input type="number" step="0.01" value={vForm.value} onChange={(e) => setVForm((f) => ({ ...f, value: e.target.value }))} />
-            </label>
-            <label>
-              Currency
-              <input value={vForm.currency} maxLength={3} onChange={(e) => setVForm((f) => ({ ...f, currency: e.target.value.toUpperCase() }))} />
-            </label>
-          </div>
-          {vValidation ? <p className="inline-hint inline-error">{vValidation}</p> : null}
-          <div className="form-actions">
-            {vEditing ? (
-              <button
-                className="btn"
-                type="button"
-                onClick={() => {
-                  setVEditing(null)
-                  setVForm(valuationEmpty)
-                }}
-              >
-                Cancel edit
-              </button>
-            ) : null}
-            <button className="btn btn-primary" type="button" onClick={saveValuation} disabled={Boolean(vValidation) || vSaving}>
-              {vSaving ? 'Saving…' : vEditing ? 'Update valuation' : 'Add valuation'}
-            </button>
-          </div>
+        <div className="property-valuation-toolbar">
+          <button
+            className="btn btn-primary"
+            type="button"
+            onClick={() => {
+              setVEditing(null)
+              setVForm(valuationEmpty)
+              setSelectedValuationId(null)
+              setValuationModalOpen(true)
+            }}
+          >
+            Add valuation
+          </button>
         </div>
 
         {valuations.length === 0 ? (
@@ -662,6 +658,7 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
                                 value: String(r.value),
                                 currency: r.currency,
                               })
+                              setValuationModalOpen(true)
                             }}
                           >
                             Edit
@@ -920,6 +917,52 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
           </div>
         </details>
       </div>
+
+      {valuationModalOpen ? (
+        <div
+          className="valuation-modal-overlay"
+          role="presentation"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeValuationModal()
+          }}
+        >
+          <div className="valuation-modal" role="dialog" aria-modal="true" aria-labelledby="valuation-modal-title">
+            <div className="valuation-modal__head">
+              <h2 id="valuation-modal-title">{vEditing ? 'Edit valuation' : 'Add valuation'}</h2>
+              <button className="btn btn-sm valuation-modal__close" type="button" onClick={closeValuationModal} aria-label="Close">
+                ×
+              </button>
+            </div>
+            <div className="form-grid">
+              <label>
+                Date *
+                <input
+                  type="date"
+                  value={vForm.date}
+                  onChange={(e) => setVForm((f) => ({ ...f, date: e.target.value }))}
+                />
+              </label>
+              <label>
+                Value *
+                <input type="number" step="0.01" value={vForm.value} onChange={(e) => setVForm((f) => ({ ...f, value: e.target.value }))} />
+              </label>
+              <label>
+                Currency
+                <input value={vForm.currency} maxLength={3} onChange={(e) => setVForm((f) => ({ ...f, currency: e.target.value.toUpperCase() }))} />
+              </label>
+            </div>
+            {vValidation ? <p className="inline-hint inline-error">{vValidation}</p> : null}
+            <div className="form-actions">
+              <button className="btn" type="button" onClick={closeValuationModal}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" type="button" onClick={() => void saveValuation()} disabled={Boolean(vValidation) || vSaving}>
+                {vSaving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
