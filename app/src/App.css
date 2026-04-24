@@ -1972,10 +1972,6 @@ a.re-property-card__title:focus-visible {
   border-radius: 0;
 }
 
-.rent-period-table-toolbar--desktop {
-  display: flex;
-}
-
 .rent-period-card {
   margin: 0;
   padding: 1rem 1.05rem;
@@ -2047,8 +2043,7 @@ a.re-property-card__title:focus-visible {
     gap: 0.75rem;
   }
 
-  .rent-period-table-wrap,
-  .rent-period-table-toolbar--desktop {
+  .rent-period-table-wrap {
     display: none;
   }
 }

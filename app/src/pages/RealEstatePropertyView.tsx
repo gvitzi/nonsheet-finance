@@ -80,14 +80,35 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
   const [eForm, setEForm] = useState(expenseEmpty)
   const [eEditing, setEEditing] = useState<PropertyExpense | null>(null)
   const [eSaving, setESaving] = useState(false)
+  const [expenseModalOpen, setExpenseModalOpen] = useState(false)
 
   const [mForm, setMForm] = useState(mortgageEmpty)
   const [mEditing, setMEditing] = useState<PropertyMortgageEntry | null>(null)
   const [mSaving, setMSaving] = useState(false)
+  const [mortgageModalOpen, setMortgageModalOpen] = useState(false)
 
   const [rpForm, setRpForm] = useState(rentPeriodEmpty)
   const [rpEditing, setRpEditing] = useState<PropertyRentPeriod | null>(null)
   const [rpSaving, setRpSaving] = useState(false)
+  const [rentPeriodModalOpen, setRentPeriodModalOpen] = useState(false)
+
+  const closeExpenseModal = useCallback(() => {
+    setExpenseModalOpen(false)
+    setEEditing(null)
+    setEForm(expenseEmpty)
+  }, [])
+
+  const closeMortgageModal = useCallback(() => {
+    setMortgageModalOpen(false)
+    setMEditing(null)
+    setMForm(mortgageEmpty)
+  }, [])
+
+  const closeRentPeriodModal = useCallback(() => {
+    setRentPeriodModalOpen(false)
+    setRpEditing(null)
+    setRpForm(rentPeriodEmpty)
+  }, [])
 
   const [openAccordionSection, setOpenAccordionSection] = useState<PropertyAccordionSection | null>('valuations')
 
@@ -126,8 +147,18 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
       setExpenses(e)
       setMortgages(m)
       setRentPeriods(rp)
-      setRpForm(rentPeriodEmpty)
+      setValuationModalOpen(false)
+      setVEditing(null)
+      setVForm(valuationEmpty)
+      setExpenseModalOpen(false)
+      setEEditing(null)
+      setEForm(expenseEmpty)
+      setMortgageModalOpen(false)
+      setMEditing(null)
+      setMForm(mortgageEmpty)
+      setRentPeriodModalOpen(false)
       setRpEditing(null)
+      setRpForm(rentPeriodEmpty)
       setSelectedValuationId(null)
       setSelectedExpenseId(null)
       setSelectedMortgageId(null)
@@ -153,21 +184,34 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
   }, [selectedValuationId, vEditing])
 
   useEffect(() => {
-    if (!valuationModalOpen) return
+    const anyOpen = valuationModalOpen || expenseModalOpen || mortgageModalOpen || rentPeriodModalOpen
+    if (!anyOpen) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        closeValuationModal()
-      }
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      if (valuationModalOpen) closeValuationModal()
+      else if (expenseModalOpen) closeExpenseModal()
+      else if (mortgageModalOpen) closeMortgageModal()
+      else closeRentPeriodModal()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [valuationModalOpen, closeValuationModal])
+  }, [
+    valuationModalOpen,
+    expenseModalOpen,
+    mortgageModalOpen,
+    rentPeriodModalOpen,
+    closeValuationModal,
+    closeExpenseModal,
+    closeMortgageModal,
+    closeRentPeriodModal,
+  ])
 
   useEffect(() => {
     if (eEditing && selectedExpenseId !== eEditing.id) {
       setEEditing(null)
       setEForm(expenseEmpty)
+      setExpenseModalOpen(false)
     }
   }, [selectedExpenseId, eEditing])
 
@@ -175,6 +219,7 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
     if (mEditing && selectedMortgageId !== mEditing.id) {
       setMEditing(null)
       setMForm(mortgageEmpty)
+      setMortgageModalOpen(false)
     }
   }, [selectedMortgageId, mEditing])
 
@@ -182,6 +227,7 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
     if (rpEditing && selectedRentPeriodId !== rpEditing.id) {
       setRpEditing(null)
       setRpForm(rentPeriodEmpty)
+      setRentPeriodModalOpen(false)
     }
   }, [selectedRentPeriodId, rpEditing])
 
@@ -353,6 +399,7 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
     setESaving(true)
     setBanner(null)
     try {
+      const updating = Boolean(eEditing)
       const iso = new Date(eForm.date + 'T12:00:00').toISOString()
       const body = {
         date: iso,
@@ -362,9 +409,8 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
       }
       if (eEditing) await api.properties.updateExpense(propertyId, eEditing.id, body)
       else await api.properties.createExpense(propertyId, body)
-      setEForm(expenseEmpty)
-      setEEditing(null)
-      setBanner({ type: 'ok', text: eEditing ? 'Expense updated.' : 'Expense added.' })
+      closeExpenseModal()
+      setBanner({ type: 'ok', text: updating ? 'Expense updated.' : 'Expense added.' })
       load()
     } catch (e: unknown) {
       setBanner({ type: 'err', text: err(e, 'Failed to save expense.') })
@@ -397,6 +443,7 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
     setMSaving(true)
     setBanner(null)
     try {
+      const updating = Boolean(mEditing)
       const iso = new Date(mForm.date + 'T12:00:00').toISOString()
       const body = {
         date: iso,
@@ -406,9 +453,8 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
       }
       if (mEditing) await api.properties.updateMortgageEntry(propertyId, mEditing.id, body)
       else await api.properties.createMortgageEntry(propertyId, body)
-      setMForm(mortgageEmpty)
-      setMEditing(null)
-      setBanner({ type: 'ok', text: mEditing ? 'Mortgage row updated.' : 'Mortgage row added.' })
+      closeMortgageModal()
+      setBanner({ type: 'ok', text: updating ? 'Mortgage row updated.' : 'Mortgage row added.' })
       load()
     } catch (e: unknown) {
       setBanner({ type: 'err', text: err(e, 'Failed to save mortgage row.') })
@@ -445,6 +491,7 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
     setRpSaving(true)
     setBanner(null)
     try {
+      const updating = Boolean(rpEditing)
       const startIso = new Date(rpForm.startDate + 'T12:00:00').toISOString()
       const endPart = rpForm.endDate.trim()
         ? { endDate: new Date(rpForm.endDate + 'T12:00:00').toISOString() }
@@ -461,10 +508,9 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
       }
       if (rpEditing) await api.properties.updateRentPeriod(propertyId, rpEditing.id, body)
       else await api.properties.createRentPeriod(propertyId, body)
-      setRpForm(rentPeriodEmpty)
-      setRpEditing(null)
+      closeRentPeriodModal()
       setSelectedRentPeriodId(null)
-      setBanner({ type: 'ok', text: rpEditing ? 'Rent period updated.' : 'Rent period added.' })
+      setBanner({ type: 'ok', text: updating ? 'Rent period updated.' : 'Rent period added.' })
       load()
     } catch (e: unknown) {
       setBanner({ type: 'err', text: err(e, 'Failed to save rent period.') })
@@ -802,76 +848,50 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
           <div className="property-accordion__body stack">
         <p className="page-subtitle">Recorded costs for this property (repairs, fees, insurance, etc.). Amounts in EUR.</p>
 
-        <div className="form-panel">
-          <h3>{eEditing ? 'Edit expense' : 'Add expense'}</h3>
-          <div className="form-grid">
-            <label>
-              Date *
-              <input type="date" value={eForm.date} onChange={(ev) => setEForm((f) => ({ ...f, date: ev.target.value }))} />
-            </label>
-            <label>
-              Name *
-              <input value={eForm.name} onChange={(ev) => setEForm((f) => ({ ...f, name: ev.target.value }))} />
-            </label>
-            <label className="span-2">
-              Description
-              <input value={eForm.description} onChange={(ev) => setEForm((f) => ({ ...f, description: ev.target.value }))} />
-            </label>
-            <label>
-              Amount *
-              <input type="number" step="0.01" value={eForm.amount} onChange={(ev) => setEForm((f) => ({ ...f, amount: ev.target.value }))} />
-            </label>
-          </div>
-          {eValidation ? <p className="inline-hint inline-error">{eValidation}</p> : null}
-          <div className="form-actions">
-            {eEditing ? (
+        <div className="property-table-toolbar">
+          <button
+            className="btn btn-primary"
+            type="button"
+            onClick={() => {
+              setEEditing(null)
+              setEForm(expenseEmpty)
+              setSelectedExpenseId(null)
+              setExpenseModalOpen(true)
+            }}
+          >
+            Add expense
+          </button>
+          {selectedExpenseId ? (
+            <div className="property-table-toolbar__actions">
               <button
-                className="btn"
+                className="btn btn-sm"
                 type="button"
                 onClick={() => {
-                  setEEditing(null)
-                  setEForm(expenseEmpty)
+                  const r = expenses.find((x) => x.id === selectedExpenseId)
+                  if (!r) return
+                  setEEditing(r)
+                  setEForm({
+                    date: dateInputFromIso(r.date),
+                    name: r.name,
+                    description: r.description ?? '',
+                    amount: String(r.amount),
+                  })
+                  setExpenseModalOpen(true)
                 }}
               >
-                Cancel edit
+                Edit
               </button>
-            ) : null}
-            <button className="btn btn-primary" type="button" onClick={saveExpense} disabled={Boolean(eValidation) || eSaving}>
-              {eSaving ? 'Saving…' : eEditing ? 'Update expense' : 'Add expense'}
-            </button>
-          </div>
+              <button className="btn btn-sm btn-danger" type="button" onClick={() => void delExpense(selectedExpenseId)}>
+                Delete
+              </button>
+            </div>
+          ) : null}
         </div>
 
         {expenses.length === 0 ? (
           <div className="empty-state">No expenses yet.</div>
         ) : (
           <>
-            {selectedExpenseId ? (
-              <div className="property-table-toolbar">
-                <div className="property-table-toolbar__actions">
-                  <button
-                    className="btn btn-sm"
-                    type="button"
-                    onClick={() => {
-                      const r = expenses.find((x) => x.id === selectedExpenseId)
-                      if (!r) return
-                      setEEditing(r)
-                      setEForm({
-                        date: dateInputFromIso(r.date),
-                        name: r.name,
-                        description: r.description ?? '',
-                        amount: String(r.amount),
-                      })
-                    }}
-                  >
-                    Edit
-                  </button>
-                  <button className="btn btn-sm btn-danger" type="button" onClick={() => void delExpense(selectedExpenseId)}>
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ) : null}
             <div className="property-table-scroll">
               <table className="table">
                 <thead>
@@ -916,86 +936,55 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
           onToggle={(e) => onAccordionToggle('mortgages', e)}
         >
           <summary className="property-accordion__summary">
-            <span className="property-accordion__title">Mortgage over time</span>
+            <span className="property-accordion__title">Mortgage payments</span>
           </summary>
           <div className="property-accordion__body stack">
         <p className="page-subtitle">Outstanding balance (debt) per date. Loan name is optional.</p>
 
-        <div className="form-panel">
-          <h3>{mEditing ? 'Edit mortgage row' : 'Add mortgage row'}</h3>
-          <div className="form-grid">
-            <label>
-              Date *
-              <input type="date" value={mForm.date} onChange={(e) => setMForm((f) => ({ ...f, date: e.target.value }))} />
-            </label>
-            <label>
-              Outstanding balance (debt) *
-              <input
-                type="number"
-                step="0.01"
-                value={mForm.outstandingBalance}
-                onChange={(e) => setMForm((f) => ({ ...f, outstandingBalance: e.target.value }))}
-              />
-            </label>
-            <label>
-              Currency
-              <input value={mForm.currency} maxLength={3} onChange={(e) => setMForm((f) => ({ ...f, currency: e.target.value.toUpperCase() }))} />
-            </label>
-            <label>
-              Loan name (optional)
-              <input value={mForm.loanName} onChange={(e) => setMForm((f) => ({ ...f, loanName: e.target.value }))} />
-            </label>
-          </div>
-          {mValidation ? <p className="inline-hint inline-error">{mValidation}</p> : null}
-          <div className="form-actions">
-            {mEditing ? (
+        <div className="property-table-toolbar">
+          <button
+            className="btn btn-primary"
+            type="button"
+            onClick={() => {
+              setMEditing(null)
+              setMForm(mortgageEmpty)
+              setSelectedMortgageId(null)
+              setMortgageModalOpen(true)
+            }}
+          >
+            Add mortgage row
+          </button>
+          {selectedMortgageId ? (
+            <div className="property-table-toolbar__actions">
               <button
-                className="btn"
+                className="btn btn-sm"
                 type="button"
                 onClick={() => {
-                  setMEditing(null)
-                  setMForm(mortgageEmpty)
+                  const r = mortgages.find((x) => x.id === selectedMortgageId)
+                  if (!r) return
+                  setMEditing(r)
+                  setMForm({
+                    date: dateInputFromIso(r.date),
+                    outstandingBalance: String(r.outstandingBalance),
+                    currency: r.currency,
+                    loanName: r.loanName ?? '',
+                  })
+                  setMortgageModalOpen(true)
                 }}
               >
-                Cancel edit
+                Edit
               </button>
-            ) : null}
-            <button className="btn btn-primary" type="button" onClick={saveMortgage} disabled={Boolean(mValidation) || mSaving}>
-              {mSaving ? 'Saving…' : mEditing ? 'Update row' : 'Add row'}
-            </button>
-          </div>
+              <button className="btn btn-sm btn-danger" type="button" onClick={() => void delMortgage(selectedMortgageId)}>
+                Delete
+              </button>
+            </div>
+          ) : null}
         </div>
 
         {mortgages.length === 0 ? (
           <div className="empty-state">No mortgage rows yet.</div>
         ) : (
           <>
-            {selectedMortgageId ? (
-              <div className="property-table-toolbar">
-                <div className="property-table-toolbar__actions">
-                  <button
-                    className="btn btn-sm"
-                    type="button"
-                    onClick={() => {
-                      const r = mortgages.find((x) => x.id === selectedMortgageId)
-                      if (!r) return
-                      setMEditing(r)
-                      setMForm({
-                        date: dateInputFromIso(r.date),
-                        outstandingBalance: String(r.outstandingBalance),
-                        currency: r.currency,
-                        loanName: r.loanName ?? '',
-                      })
-                    }}
-                  >
-                    Edit
-                  </button>
-                  <button className="btn btn-sm btn-danger" type="button" onClick={() => void delMortgage(selectedMortgageId)}>
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ) : null}
             <div className="property-table-scroll">
               <table className="table">
                 <thead>
@@ -1049,87 +1038,52 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
               ranges stay sequential. The period that contains today drives the rent and Hausgeld shown in Details above.
             </p>
 
-            <div className="form-panel">
-              <h3>{rpEditing ? 'Edit rent period' : 'Add rent period'}</h3>
-              <div className="form-grid">
-                <label>
-                  Start date *
-                  <input type="date" value={rpForm.startDate} onChange={(e) => setRpForm((f) => ({ ...f, startDate: e.target.value }))} />
-                </label>
-                <label>
-                  End date (optional)
-                  <input type="date" value={rpForm.endDate} onChange={(e) => setRpForm((f) => ({ ...f, endDate: e.target.value }))} />
-                </label>
-                <label>
-                  Rent (monthly) *
-                  <input type="number" step="0.01" value={rpForm.rent} onChange={(e) => setRpForm((f) => ({ ...f, rent: e.target.value }))} />
-                </label>
-                <label>
-                  Hausgeld (monthly)
-                  <input type="number" step="0.01" value={rpForm.hausgeld} onChange={(e) => setRpForm((f) => ({ ...f, hausgeld: e.target.value }))} />
-                </label>
-                <label className="span-2">
-                  Tenants (comma-separated names)
-                  <input value={rpForm.tenantNames} onChange={(e) => setRpForm((f) => ({ ...f, tenantNames: e.target.value }))} />
-                </label>
-                <label className="span-2">
-                  Notes
-                  <textarea rows={3} value={rpForm.notes} onChange={(e) => setRpForm((f) => ({ ...f, notes: e.target.value }))} />
-                </label>
-              </div>
-              {rpValidation ? <p className="inline-hint inline-error">{rpValidation}</p> : null}
-              <div className="form-actions">
-                {rpEditing ? (
+            <div className="property-table-toolbar">
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={() => {
+                  setRpEditing(null)
+                  setRpForm(rentPeriodEmpty)
+                  setSelectedRentPeriodId(null)
+                  setRentPeriodModalOpen(true)
+                }}
+              >
+                Add rent period
+              </button>
+              {selectedRentPeriodId ? (
+                <div className="property-table-toolbar__actions">
                   <button
-                    className="btn"
+                    className="btn btn-sm"
                     type="button"
                     onClick={() => {
-                      setRpEditing(null)
-                      setRpForm(rentPeriodEmpty)
+                      const r = rentPeriods.find((x) => x.id === selectedRentPeriodId)
+                      if (!r) return
+                      setRpEditing(r)
+                      setRpForm({
+                        startDate: dateInputFromIso(r.startDate),
+                        endDate: r.endDate ? dateInputFromIso(r.endDate) : '',
+                        rent: String(r.rent),
+                        hausgeld: String(r.hausgeld),
+                        tenantNames: tenantNamesToInput(r.tenantNames),
+                        notes: r.notes ?? '',
+                      })
+                      setRentPeriodModalOpen(true)
                     }}
                   >
-                    Cancel edit
+                    Edit
                   </button>
-                ) : null}
-                <button className="btn btn-primary" type="button" onClick={() => void saveRentPeriod()} disabled={Boolean(rpValidation) || rpSaving}>
-                  {rpSaving ? 'Saving…' : rpEditing ? 'Update period' : 'Add period'}
-                </button>
-              </div>
+                  <button className="btn btn-sm btn-danger" type="button" onClick={() => void delRentPeriod(selectedRentPeriodId)}>
+                    Delete
+                  </button>
+                </div>
+              ) : null}
             </div>
 
             {rentPeriods.length === 0 ? (
               <div className="empty-state">No rent periods yet.</div>
             ) : (
               <>
-                {selectedRentPeriodId ? (
-                  <div className="property-table-toolbar rent-period-table-toolbar rent-period-table-toolbar--desktop">
-                    <div className="property-table-toolbar__actions">
-                      <button
-                        className="btn btn-sm"
-                        type="button"
-                        onClick={() => {
-                          const r = rentPeriods.find((x) => x.id === selectedRentPeriodId)
-                          if (!r) return
-                          setRpEditing(r)
-                          setRpForm({
-                            startDate: dateInputFromIso(r.startDate),
-                            endDate: r.endDate ? dateInputFromIso(r.endDate) : '',
-                            rent: String(r.rent),
-                            hausgeld: String(r.hausgeld),
-                            tenantNames: tenantNamesToInput(r.tenantNames),
-                            notes: r.notes ?? '',
-                          })
-                        }}
-                      >
-                        Edit
-                      </button>
-                      <button className="btn btn-sm btn-danger" type="button" onClick={() => void delRentPeriod(selectedRentPeriodId)}>
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-
                 <div className="rent-period-cards" role="list" aria-label="Rent periods">
                   {rentPeriods.map((r) => (
                     <article
@@ -1178,6 +1132,7 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
                                 tenantNames: tenantNamesToInput(r.tenantNames),
                                 notes: r.notes ?? '',
                               })
+                              setRentPeriodModalOpen(true)
                             }}
                           >
                             Edit
@@ -1274,6 +1229,157 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
               </button>
               <button className="btn btn-primary" type="button" onClick={() => void saveValuation()} disabled={Boolean(vValidation) || vSaving}>
                 {vSaving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {expenseModalOpen ? (
+        <div
+          className="valuation-modal-overlay"
+          role="presentation"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeExpenseModal()
+          }}
+        >
+          <div className="valuation-modal" role="dialog" aria-modal="true" aria-labelledby="expense-modal-title">
+            <div className="valuation-modal__head">
+              <h2 id="expense-modal-title">{eEditing ? 'Edit expense' : 'Add expense'}</h2>
+              <button className="btn btn-sm valuation-modal__close" type="button" onClick={closeExpenseModal} aria-label="Close">
+                ×
+              </button>
+            </div>
+            <div className="form-grid">
+              <label>
+                Date *
+                <input type="date" value={eForm.date} onChange={(ev) => setEForm((f) => ({ ...f, date: ev.target.value }))} />
+              </label>
+              <label>
+                Name *
+                <input value={eForm.name} onChange={(ev) => setEForm((f) => ({ ...f, name: ev.target.value }))} />
+              </label>
+              <label className="span-2">
+                Description
+                <input value={eForm.description} onChange={(ev) => setEForm((f) => ({ ...f, description: ev.target.value }))} />
+              </label>
+              <label>
+                Amount *
+                <input type="number" step="0.01" value={eForm.amount} onChange={(ev) => setEForm((f) => ({ ...f, amount: ev.target.value }))} />
+              </label>
+            </div>
+            {eValidation ? <p className="inline-hint inline-error">{eValidation}</p> : null}
+            <div className="form-actions">
+              <button className="btn" type="button" onClick={closeExpenseModal}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" type="button" onClick={() => void saveExpense()} disabled={Boolean(eValidation) || eSaving}>
+                {eSaving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {mortgageModalOpen ? (
+        <div
+          className="valuation-modal-overlay"
+          role="presentation"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeMortgageModal()
+          }}
+        >
+          <div className="valuation-modal" role="dialog" aria-modal="true" aria-labelledby="mortgage-modal-title">
+            <div className="valuation-modal__head">
+              <h2 id="mortgage-modal-title">{mEditing ? 'Edit mortgage row' : 'Add mortgage row'}</h2>
+              <button className="btn btn-sm valuation-modal__close" type="button" onClick={closeMortgageModal} aria-label="Close">
+                ×
+              </button>
+            </div>
+            <div className="form-grid">
+              <label>
+                Date *
+                <input type="date" value={mForm.date} onChange={(e) => setMForm((f) => ({ ...f, date: e.target.value }))} />
+              </label>
+              <label>
+                Outstanding balance (debt) *
+                <input
+                  type="number"
+                  step="0.01"
+                  value={mForm.outstandingBalance}
+                  onChange={(e) => setMForm((f) => ({ ...f, outstandingBalance: e.target.value }))}
+                />
+              </label>
+              <label>
+                Currency
+                <input value={mForm.currency} maxLength={3} onChange={(e) => setMForm((f) => ({ ...f, currency: e.target.value.toUpperCase() }))} />
+              </label>
+              <label>
+                Loan name (optional)
+                <input value={mForm.loanName} onChange={(e) => setMForm((f) => ({ ...f, loanName: e.target.value }))} />
+              </label>
+            </div>
+            {mValidation ? <p className="inline-hint inline-error">{mValidation}</p> : null}
+            <div className="form-actions">
+              <button className="btn" type="button" onClick={closeMortgageModal}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" type="button" onClick={() => void saveMortgage()} disabled={Boolean(mValidation) || mSaving}>
+                {mSaving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {rentPeriodModalOpen ? (
+        <div
+          className="valuation-modal-overlay"
+          role="presentation"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeRentPeriodModal()
+          }}
+        >
+          <div className="valuation-modal" role="dialog" aria-modal="true" aria-labelledby="rent-period-modal-title">
+            <div className="valuation-modal__head">
+              <h2 id="rent-period-modal-title">{rpEditing ? 'Edit rent period' : 'Add rent period'}</h2>
+              <button className="btn btn-sm valuation-modal__close" type="button" onClick={closeRentPeriodModal} aria-label="Close">
+                ×
+              </button>
+            </div>
+            <div className="form-grid">
+              <label>
+                Start date *
+                <input type="date" value={rpForm.startDate} onChange={(e) => setRpForm((f) => ({ ...f, startDate: e.target.value }))} />
+              </label>
+              <label>
+                End date (optional)
+                <input type="date" value={rpForm.endDate} onChange={(e) => setRpForm((f) => ({ ...f, endDate: e.target.value }))} />
+              </label>
+              <label>
+                Rent (monthly) *
+                <input type="number" step="0.01" value={rpForm.rent} onChange={(e) => setRpForm((f) => ({ ...f, rent: e.target.value }))} />
+              </label>
+              <label>
+                Hausgeld (monthly)
+                <input type="number" step="0.01" value={rpForm.hausgeld} onChange={(e) => setRpForm((f) => ({ ...f, hausgeld: e.target.value }))} />
+              </label>
+              <label className="span-2">
+                Tenants (comma-separated names)
+                <input value={rpForm.tenantNames} onChange={(e) => setRpForm((f) => ({ ...f, tenantNames: e.target.value }))} />
+              </label>
+              <label className="span-2">
+                Notes
+                <textarea rows={3} value={rpForm.notes} onChange={(e) => setRpForm((f) => ({ ...f, notes: e.target.value }))} />
+              </label>
+            </div>
+            {rpValidation ? <p className="inline-hint inline-error">{rpValidation}</p> : null}
+            <div className="form-actions">
+              <button className="btn" type="button" onClick={closeRentPeriodModal}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" type="button" onClick={() => void saveRentPeriod()} disabled={Boolean(rpValidation) || rpSaving}>
+                {rpSaving ? 'Saving…' : 'Save'}
               </button>
             </div>
           </div>
