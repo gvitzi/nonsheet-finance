@@ -175,8 +175,11 @@ export function WealthStoreProvider({ children }: { children: ReactNode }) {
 
   const exportFile = useCallback(async () => {
     const raw = stringifyWealthDocument(getWealthDocument())
-    const day = new Date().toISOString().slice(0, 10)
-    downloadJson(`nonsheet-finance-${day}.json`, raw)
+    const d = new Date()
+    const p = (n: number) => String(n).padStart(2, '0')
+    const day = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+    const timeHm = `${p(d.getHours())}_${p(d.getMinutes())}`
+    downloadJson(`nonsheet-finance-${day}_${timeHm}.json`, raw)
     markWealthDocStoreSaved()
   }, [])
 
