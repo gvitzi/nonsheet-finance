@@ -305,6 +305,7 @@ export interface Settings {
   baseCurrency: string
   /** Default currency pre-selected on the Dashboard; when omitted, use `baseCurrency`. */
   displayCurrency?: string
+  theme?: 'light' | 'dark'
   staleAssetWarningMonths?: number
   /** Months ahead (and past maturities) for mortgage loan end-date notifications; default 3. */
   mortgageLoanEndWarningMonths?: number

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ApiError, api } from '../api'
 import type { Settings } from '../api'
+import { applyTheme, normalizeTheme, type AppTheme } from '../theme'
 
 const DATA_HINT =
   'The app keeps all data in one JSON document. Use the title bar: Import to load a file, Export to download a dated copy. Sync that file via Google Drive or any folder sync between devices.'
@@ -24,6 +25,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [baseCurrency, setBaseCurrency] = useState('EUR')
   const [displayCurrency, setDisplayCurrency] = useState('EUR')
+  const [theme, setTheme] = useState<AppTheme>('light')
   const [staleMonths, setStaleMonths] = useState('3')
   const [loanEndWarnMonths, setLoanEndWarnMonths] = useState('3')
   const [loading, setLoading] = useState(true)
@@ -54,6 +56,7 @@ export default function SettingsPage() {
         setSettings(data)
         setBaseCurrency(data.baseCurrency)
         setDisplayCurrency((data.displayCurrency ?? data.baseCurrency).trim().toUpperCase() || data.baseCurrency)
+        setTheme(normalizeTheme(data.theme))
         setStaleMonths(String(data.staleAssetWarningMonths ?? 3))
         setLoanEndWarnMonths(String(data.mortgageLoanEndWarningMonths ?? 3))
       })
@@ -77,12 +80,15 @@ export default function SettingsPage() {
       const updated = await api.settings.update({
         baseCurrency: base,
         displayCurrency: disp,
+        theme,
         staleAssetWarningMonths: parseInt(staleMonths.trim(), 10),
         mortgageLoanEndWarningMonths: parseInt(loanEndWarnMonths.trim(), 10),
       })
       setSettings(updated)
       setBaseCurrency(updated.baseCurrency)
       setDisplayCurrency((updated.displayCurrency ?? updated.baseCurrency).trim().toUpperCase() || updated.baseCurrency)
+      setTheme(normalizeTheme(updated.theme))
+      applyTheme(normalizeTheme(updated.theme))
       setStaleMonths(String(updated.staleAssetWarningMonths ?? 3))
       setLoanEndWarnMonths(String(updated.mortgageLoanEndWarningMonths ?? 3))
       setSuccess('Settings saved.')
@@ -133,6 +139,27 @@ export default function SettingsPage() {
               placeholder="EUR"
               title="Default currency pre-selected on the Dashboard. Set equal to base currency to show aggregated amounts without an extra conversion step."
             />
+          </label>
+          <label className="span-2">
+            Theme
+            <div className="theme-toggle" role="radiogroup" aria-label="Theme">
+              <button
+                type="button"
+                className={`btn ${theme === 'light' ? 'btn-primary' : ''}`}
+                aria-pressed={theme === 'light'}
+                onClick={() => setTheme('light')}
+              >
+                Light
+              </button>
+              <button
+                type="button"
+                className={`btn ${theme === 'dark' ? 'btn-primary' : ''}`}
+                aria-pressed={theme === 'dark'}
+                onClick={() => setTheme('dark')}
+              >
+                Dark
+              </button>
+            </div>
           </label>
           <label className="span-2">
             Data file

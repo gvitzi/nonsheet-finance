@@ -19,6 +19,7 @@ import { GroupNavGlyph, resolveGroupNavIconId, resolvePortfolioNavIconId } from 
 import { assetGroupHubPath, assetGroupNewPath } from './portfolioPaths'
 import { TitlebarNotificationsBell } from './TitlebarNotificationsBell'
 import { usePwaInstall } from './usePwaInstall'
+import { useAppliedTheme } from './theme'
 
 const SIDEBAR_COLLAPSED_KEY = 'nonsheet-finance-sidebar-collapsed'
 
@@ -304,6 +305,7 @@ function TitlebarCogMenu() {
 }
 
 function App() {
+  useAppliedTheme()
   const location = useLocation()
   const compactNav = useMediaQuery(MOBILE_NAV_MQ)
   const pathKey = `${location.pathname}${location.search}`
