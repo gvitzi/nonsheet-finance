@@ -5,7 +5,7 @@ import { ApiError, api } from '../api'
 import type { JsonImportMode, SecurityValuation } from '../api'
 import SortableFilterableTable, { type ColumnDef } from '../components/dataTable/SortableFilterableTable'
 import { PORTFOLIOS_UPDATED_EVENT } from '../groupKinds'
-import { displayTickerInTable, stockValuationSecurityCell } from '../securityDisplay'
+import { displayTickerInTable, stockValuationNameDisplay } from '../securityDisplay'
 
 type HoldingOption = {
   assetId: string
@@ -217,11 +217,11 @@ export default function StockValuations() {
         cell: (v) => new Date(v.date).toLocaleDateString(),
       },
       {
-        id: 'security',
-        header: 'Security',
+        id: 'name',
+        header: 'Name',
         getSortValue: (v) => {
-          const c = stockValuationSecurityCell(v)
-          return [c.title, c.subtitle].filter(Boolean).join(' ')
+          const d = stockValuationNameDisplay(v)
+          return [d.primary, d.ticker, d.isin].filter(Boolean).join(' ')
         },
         getFilterValue: (v) => v.assetId,
         filter: {
@@ -229,8 +229,8 @@ export default function StockValuations() {
           getOptions: (all) => {
             const byId = new Map<string, string>()
             for (const r of all) {
-              const c = stockValuationSecurityCell(r)
-              const label = c.subtitle ? `${c.title} — ${c.subtitle}` : c.title
+              const d = stockValuationNameDisplay(r)
+              const label = [d.primary, d.ticker, d.isin].filter(Boolean).join(' — ')
               byId.set(r.assetId, label)
             }
             const entries = [...byId.entries()].sort((a, b) => a[1].localeCompare(b[1], undefined, { sensitivity: 'base' }))
@@ -238,26 +238,18 @@ export default function StockValuations() {
           },
         },
         cell: (v) => {
-          const c = stockValuationSecurityCell(v)
+          const d = stockValuationNameDisplay(v)
           return (
-            <>
-              <strong>{c.title}</strong>
-              {c.subtitle ? (
-                <div style={{ fontWeight: 400, fontSize: '0.85rem', opacity: 0.88, marginTop: '0.15rem' }}>{c.subtitle}</div>
+            <div className="holding-table-name">
+              <div className="holding-table-name__primary">{d.primary}</div>
+              {d.ticker || d.isin ? (
+                <div className="holding-table-name__sub">
+                  {d.ticker ? <span className="holding-table-name__ticker">{d.ticker}</span> : null}
+                  {d.isin ? <span className="holding-table-name__isin">{d.isin}</span> : null}
+                </div>
               ) : null}
-            </>
+            </div>
           )
-        },
-      },
-      {
-        id: 'isin',
-        header: 'ISIN',
-        getSortValue: (v) => v.asset?.isin?.trim() || v.isin?.trim() || '',
-        getFilterValue: (v) => v.asset?.isin?.trim() || v.isin?.trim() || '',
-        filter: { type: 'text', placeholder: 'ISIN…' },
-        cell: (v) => {
-          const isinShow = v.asset?.isin?.trim() || v.isin?.trim() || null
-          return <code>{isinShow ?? '—'}</code>
         },
       },
       {
