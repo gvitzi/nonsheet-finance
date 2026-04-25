@@ -345,51 +345,69 @@ export default function StockValuations() {
         </div>
       ) : null}
 
-      {valPanelOpen && (
-        <div className="form-panel">
-          <h2>{valEditing ? 'Edit valuation' : 'Add valuation'}</h2>
-          <div className="form-grid">
-            <label className="span-2">
-              Holding *
-              <select value={valForm.assetId} onChange={(e) => setValForm((f) => ({ ...f, assetId: e.target.value }))}>
-                <option value="">Select…</option>
-                {holdings.map((h) => (
-                  <option key={h.assetId} value={h.assetId}>
-                    {h.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Date *
-              <input type="date" value={valForm.date} onChange={(e) => setValForm((f) => ({ ...f, date: e.target.value }))} />
-            </label>
-            <label className="span-2">
-              Share price (your mark) *
-              <input
-                type="number"
-                step="any"
-                min="0"
-                value={valForm.sharePrice}
-                onChange={(e) => setValForm((f) => ({ ...f, sharePrice: e.target.value }))}
-              />
-            </label>
-            <label className="span-2">
-              Note
-              <input value={valForm.note} onChange={(e) => setValForm((f) => ({ ...f, note: e.target.value }))} />
-            </label>
-          </div>
-          {valValidation ? <p className="inline-hint inline-error">{valValidation}</p> : null}
-          <div className="form-actions">
-            <button className="btn" type="button" onClick={closeValPanel}>
-              Cancel
-            </button>
-            <button className="btn btn-primary" type="button" onClick={saveVal} disabled={Boolean(valValidation) || valSaving}>
-              {valSaving ? 'Saving…' : 'Save'}
-            </button>
+      {valPanelOpen ? (
+        <div
+          className="valuation-modal-overlay"
+          role="presentation"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeValPanel()
+          }}
+        >
+          <div
+            className="valuation-modal valuation-modal--stock-valuations"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sv-valuation-modal-title"
+          >
+            <div className="valuation-modal__head">
+              <h2 id="sv-valuation-modal-title">{valEditing ? 'Edit valuation' : 'Add valuation'}</h2>
+              <button className="btn btn-sm valuation-modal__close" type="button" onClick={closeValPanel} aria-label="Close">
+                ×
+              </button>
+            </div>
+            <div className="form-grid">
+              <label className="span-2">
+                Holding *
+                <select value={valForm.assetId} onChange={(e) => setValForm((f) => ({ ...f, assetId: e.target.value }))}>
+                  <option value="">Select…</option>
+                  {holdings.map((h) => (
+                    <option key={h.assetId} value={h.assetId}>
+                      {h.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Date *
+                <input type="date" value={valForm.date} onChange={(e) => setValForm((f) => ({ ...f, date: e.target.value }))} />
+              </label>
+              <label className="span-2">
+                Share price (your mark) *
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={valForm.sharePrice}
+                  onChange={(e) => setValForm((f) => ({ ...f, sharePrice: e.target.value }))}
+                />
+              </label>
+              <label className="span-2">
+                Note
+                <input value={valForm.note} onChange={(e) => setValForm((f) => ({ ...f, note: e.target.value }))} />
+              </label>
+            </div>
+            {valValidation ? <p className="inline-hint inline-error">{valValidation}</p> : null}
+            <div className="form-actions">
+              <button className="btn" type="button" onClick={closeValPanel}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" type="button" onClick={() => void saveVal()} disabled={Boolean(valValidation) || valSaving}>
+                {valSaving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
           </div>
         </div>
-      )}
+      ) : null}
 
       {holdings.length === 0 ? null : rows.length === 0 ? (
         <div className="empty-state">No valuations yet. Add marks when you want dated per-share values.</div>

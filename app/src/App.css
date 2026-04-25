@@ -1806,6 +1806,11 @@ body {
   border-radius: var(--radius-md);
 }
 
+.valuation-modal--stock-valuations {
+  width: min(36rem, 100%);
+  max-height: min(90vh, 640px);
+}
+
 .property-table-toolbar {
   display: flex;
   flex-wrap: wrap;

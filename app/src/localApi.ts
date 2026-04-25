@@ -1333,19 +1333,21 @@ export const api = {
       }
       updateWealthDocument((d) => {
         const others = d.securityValuations.filter((v) => v.id !== id)
-        const si = d.securityInfo.filter((x) => x.isin !== isin)
-        const now = nowIso()
-        const infoRow = {
-          isin,
-          ticker: asset.name,
-          name: asset.name,
-          currency,
-          updatedAt: now,
-        }
         let next: WealthDocument = {
           ...d,
           securityValuations: [...others, row],
-          securityInfo: [...si, infoRow],
+        }
+        // Do not overwrite Stock Information (securityInfo); only add a stub when this ISIN is unknown.
+        if (!d.securityInfo.some((x) => x.isin === isin)) {
+          const now = nowIso()
+          const infoRow = {
+            isin,
+            ticker: asset.name,
+            name: asset.name,
+            currency,
+            updatedAt: now,
+          }
+          next = { ...next, securityInfo: [...d.securityInfo, infoRow] }
         }
         next = syncSecuritiesHoldingsByIsin(next, isin)
         return next
@@ -1386,18 +1388,10 @@ export const api = {
           createdAt: existing.createdAt,
           updatedAt: t,
         }
-        const si = d.securityInfo.filter((x) => x.isin !== nextIsin)
-        const infoRow = {
-          isin: nextIsin,
-          ticker: asset.name,
-          name: asset.name,
-          currency: row.currency,
-          updatedAt: t,
-        }
+        // Editing a mark must not change securityInfo (ticker / name); that table is edited on Stock Information.
         let next: WealthDocument = {
           ...d,
           securityValuations: [...rest, row],
-          securityInfo: [...si, infoRow],
         }
         next = syncSecuritiesHoldingsByIsin(next, oldIsin)
         if (nextIsin !== oldIsin) next = syncSecuritiesHoldingsByIsin(next, nextIsin)
@@ -1518,19 +1512,19 @@ export const api = {
           valuations = [...d.securityValuations.filter((v) => !byId.has(v.id)), ...unique]
         }
         let next: WealthDocument = { ...d, securityValuations: valuations }
-        let si = [...next.securityInfo]
+        const si = [...d.securityInfo]
         for (const row of unique) {
           const asset = d.assets.find((a) => a.id === row.assetId)
-          if (!asset) continue
-          const inf = {
-            isin: row.isin!,
+          if (!asset || !row.isin) continue
+          const isinKey = row.isin.trim().toUpperCase()
+          if (si.some((x) => x.isin === isinKey)) continue
+          si.push({
+            isin: isinKey,
             ticker: asset.name,
             name: asset.name,
             currency: row.currency,
             updatedAt: row.updatedAt,
-          }
-          si = si.filter((x) => x.isin !== row.isin)
-          si.push(inf)
+          })
         }
         next = { ...next, securityInfo: si }
         const nextIsins = new Set(unique.map((r) => r.isin).filter(Boolean) as string[])
