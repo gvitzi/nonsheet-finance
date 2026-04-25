@@ -15,6 +15,22 @@ export function chartLabelForSecurityHolding(src: {
   return isinKey || n || '—'
 }
 
+/** Primary line for securities tables (holdings, stock valuations): issuer / name, not the trading symbol. */
+export function securityTablePrimaryName(src: {
+  name: string
+  isin?: string | null
+  ticker?: string | null
+  securityName?: string | null
+}): string {
+  const sn = src.securityName?.trim()
+  if (sn) return sn
+  const n = src.name?.trim() ?? ''
+  const isinKey = src.isin?.trim().toUpperCase() ?? ''
+  if (n && (!isinKey || n.toUpperCase() !== isinKey)) return n
+  const sym = displayTickerInTable(src)
+  return sym !== '—' ? sym : isinKey || '—'
+}
+
 /** Ticker column: reference ticker, else holding name unless it duplicates the ISIN (or looks ISIN-only). */
 export function displayTickerInTable(src: {
   name: string
@@ -41,8 +57,8 @@ export function decodeIsinFromValuationId(id: string): string | null {
   return raw || null
 }
 
-/** Stock valuations table: ticker / name lines when asset exists; else ISIN from row or mark id. */
-export function stockValuationSecurityCell(v: {
+/** Stock valuations “Name” cell: same primary / ticker / ISIN layout as securities holdings. */
+export function stockValuationNameDisplay(v: {
   id: string
   isin?: string
   asset?: {
@@ -51,18 +67,18 @@ export function stockValuationSecurityCell(v: {
     ticker?: string | null
     securityName?: string | null
   }
-}): { title: string; subtitle: string | null } {
-  const isinFallback = v.isin?.trim() || decodeIsinFromValuationId(v.id) || ''
+}): { primary: string; ticker: string | null; isin: string | null } {
+  const isinResolved = (v.asset?.isin?.trim() || v.isin?.trim() || decodeIsinFromValuationId(v.id) || '').toUpperCase()
+  const isinShow = isinResolved || null
+
   if (!v.asset) {
-    return { title: isinFallback || '—', subtitle: null }
+    return { primary: isinShow ?? '—', ticker: null, isin: null }
   }
-  const short = displayTickerInTable(v.asset)
-  const full = v.asset.securityName?.trim()
-  const rawName = v.asset.name?.trim()
-  if (short !== '—') {
-    return { title: short, subtitle: full && full !== short ? full : null }
+
+  const tk = displayTickerInTable(v.asset)
+  return {
+    primary: securityTablePrimaryName(v.asset),
+    ticker: tk !== '—' ? tk : null,
+    isin: isinShow,
   }
-  if (full) return { title: full, subtitle: null }
-  if (rawName) return { title: rawName, subtitle: null }
-  return { title: isinFallback || '—', subtitle: null }
 }

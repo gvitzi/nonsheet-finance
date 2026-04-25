@@ -4,7 +4,7 @@ import { ApiError, api } from '../api'
 import type { Asset, AssetGroup, SecurityTransaction, SecurityTxKind, SecurityValuation } from '../api'
 import { PORTFOLIOS_UPDATED_EVENT, labelForGroupKind } from '../groupKinds'
 import { assetGroupEditPath } from '../portfolioPaths'
-import { chartLabelForSecurityHolding, displayTickerInTable } from '../securityDisplay'
+import { chartLabelForSecurityHolding, displayTickerInTable, securityTablePrimaryName } from '../securityDisplay'
 import { useDisplayMoney } from '../useDisplayMoney'
 import StatsPanel from './StatsPanel'
 
@@ -75,22 +75,6 @@ function marketValueForAsset(a: Asset): number | null {
   const sp = sharePriceForAsset(a)
   if (sp == null || Number.isNaN(sp)) return null
   return q * sp
-}
-
-/** Holdings “Name” column: primary line (issuer / name, not the trading symbol). */
-function holdingPrimaryDisplayName(a: Asset): string {
-  const sn = a.securityName?.trim()
-  if (sn) return sn
-  const n = a.name?.trim() ?? ''
-  const isinKey = a.isin?.trim().toUpperCase() ?? ''
-  if (n && (!isinKey || n.toUpperCase() !== isinKey)) return n
-  const sym = displayTickerInTable(a)
-  return sym !== '—' ? sym : isinKey || '—'
-}
-
-/** Symbol / short ticker for the sub-line under the display name. */
-function holdingSymbolLine(a: Asset): string {
-  return displayTickerInTable(a)
 }
 
 function err(e: unknown, fallback: string) {
@@ -506,12 +490,12 @@ export default function SecuritiesGroupHub({ group, portfolioId, assetGroupId }:
                 const mv = marketValueForAsset(a)
                 const closed = a.position != null && !Number.isNaN(a.position) && a.position === 0
                 const isin = a.isin?.trim().toUpperCase() ?? ''
-                const sym = holdingSymbolLine(a)
+                const sym = displayTickerInTable(a)
                 return (
                   <tr key={a.id}>
                     <td>
                       <div className="holding-table-name">
-                        <div className="holding-table-name__primary">{holdingPrimaryDisplayName(a)}</div>
+                        <div className="holding-table-name__primary">{securityTablePrimaryName(a)}</div>
                         <div className="holding-table-name__sub">
                           <span className="holding-table-name__ticker">{sym}</span>
                           {isin ? <span className="holding-table-name__isin">{isin}</span> : null}
