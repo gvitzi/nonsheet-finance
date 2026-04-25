@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type SyntheticEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError, api } from '../api'
 import type { Asset, AssetGroup, SecurityTransaction, SecurityTxKind, SecurityValuation } from '../api'
@@ -75,6 +75,22 @@ function marketValueForAsset(a: Asset): number | null {
   const sp = sharePriceForAsset(a)
   if (sp == null || Number.isNaN(sp)) return null
   return q * sp
+}
+
+/** Holdings “Name” column: primary line (issuer / name, not the trading symbol). */
+function holdingPrimaryDisplayName(a: Asset): string {
+  const sn = a.securityName?.trim()
+  if (sn) return sn
+  const n = a.name?.trim() ?? ''
+  const isinKey = a.isin?.trim().toUpperCase() ?? ''
+  if (n && (!isinKey || n.toUpperCase() !== isinKey)) return n
+  const sym = displayTickerInTable(a)
+  return sym !== '—' ? sym : isinKey || '—'
+}
+
+/** Symbol / short ticker for the sub-line under the display name. */
+function holdingSymbolLine(a: Asset): string {
+  return displayTickerInTable(a)
 }
 
 function err(e: unknown, fallback: string) {
@@ -210,6 +226,13 @@ export default function SecuritiesGroupHub({ group, portfolioId, assetGroupId }:
   const [moveTargetId, setMoveTargetId] = useState('')
   const [sameKindGroups, setSameKindGroups] = useState<{ id: string; label: string }[]>([])
   const [moveSaving, setMoveSaving] = useState(false)
+
+  const [tradesAccordionOpen, setTradesAccordionOpen] = useState(true)
+  const onTradesAccordionToggle = useCallback((e: SyntheticEvent<HTMLDetailsElement>) => {
+    const el = e.currentTarget
+    if (el.open) setTradesAccordionOpen(true)
+    else setTradesAccordionOpen(false)
+  }, [])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -470,10 +493,8 @@ export default function SecuritiesGroupHub({ group, portfolioId, assetGroupId }:
           <table className="table">
             <thead>
               <tr>
-                <th>Ticker</th>
-                <th>ISIN</th>
+                <th>Name</th>
                 <th>Quantity</th>
-                <th>Currency</th>
                 <th>Marked share price</th>
                 <th>Market value</th>
                 <th />
@@ -484,22 +505,21 @@ export default function SecuritiesGroupHub({ group, portfolioId, assetGroupId }:
                 const sp = sharePriceForAsset(a)
                 const mv = marketValueForAsset(a)
                 const closed = a.position != null && !Number.isNaN(a.position) && a.position === 0
+                const isin = a.isin?.trim().toUpperCase() ?? ''
+                const sym = holdingSymbolLine(a)
                 return (
                   <tr key={a.id}>
                     <td>
-                      <strong>{displayTickerInTable(a)}</strong>
-                      {a.securityName?.trim() && displayTickerInTable(a) !== a.securityName.trim() ? (
-                        <div style={{ fontWeight: 400, fontSize: '0.85rem', opacity: 0.88, marginTop: '0.15rem' }}>
-                          {a.securityName.trim()}
+                      <div className="holding-table-name">
+                        <div className="holding-table-name__primary">{holdingPrimaryDisplayName(a)}</div>
+                        <div className="holding-table-name__sub">
+                          <span className="holding-table-name__ticker">{sym}</span>
+                          {isin ? <span className="holding-table-name__isin">{isin}</span> : null}
                         </div>
-                      ) : null}
-                      {closed ? <span style={{ fontWeight: 400, opacity: 0.75 }}> — closed</span> : null}
-                    </td>
-                    <td>
-                      <code>{a.isin?.trim() || '—'}</code>
+                        {closed ? <span className="holding-table-name__closed"> — closed</span> : null}
+                      </div>
                     </td>
                     <td>{a.position != null && !Number.isNaN(a.position) ? fmtShares(a.position) : '—'}</td>
-                    <td>{a.currency}</td>
                     <td>{sp != null && !Number.isNaN(sp) ? fmtSharePrice(sp, a.currency) : '—'}</td>
                     <td className="positive">{mv != null && !Number.isNaN(mv) ? fmtMoney(mv, a.currency) : '—'}</td>
                     <td className="actions">
@@ -548,12 +568,23 @@ export default function SecuritiesGroupHub({ group, portfolioId, assetGroupId }:
       </section>
 
       <section className="stack" aria-labelledby="tx-heading">
-        <div className="page-header">
-          <h2 id="tx-heading">Trades (purchases &amp; sales)</h2>
-          <button className="btn btn-primary" type="button" onClick={openTxCreate}>
-            + Add trade
-          </button>
-        </div>
+        <div className="property-accordions" role="presentation">
+          <details
+            className="property-accordion"
+            open={tradesAccordionOpen}
+            onToggle={onTradesAccordionToggle}
+          >
+            <summary className="property-accordion__summary">
+              <span className="property-accordion__title" id="tx-heading">
+                Trades (purchases &amp; sales)
+              </span>
+            </summary>
+            <div className="property-accordion__body stack">
+              <div className="property-table-toolbar">
+                <button className="btn btn-primary" type="button" onClick={openTxCreate}>
+                  + Add trade
+                </button>
+              </div>
 
         {txPanelOpen && (
           <div className="form-panel">
@@ -707,6 +738,9 @@ export default function SecuritiesGroupHub({ group, portfolioId, assetGroupId }:
             </tbody>
           </table>
         )}
+            </div>
+          </details>
+        </div>
       </section>
     </div>
   )
