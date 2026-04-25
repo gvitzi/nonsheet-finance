@@ -38,6 +38,10 @@ export default function GroupHubGeneric({ group, portfolioId, assetGroupId }: Pr
   const [assetEditing, setAssetEditing] = useState<Asset | null>(null)
   const [moveToGroupId, setMoveToGroupId] = useState<string>(assetGroupId)
   const [sameKindGroups, setSameKindGroups] = useState<{ id: string; label: string }[]>([])
+  const [moveAsset, setMoveAsset] = useState<Asset | null>(null)
+  const [moveTargetGroupId, setMoveTargetGroupId] = useState('')
+  const [movePanelGroups, setMovePanelGroups] = useState<{ id: string; label: string }[]>([])
+  const [moveSaving, setMoveSaving] = useState(false)
   const [liabilityEditing, setLiabilityEditing] = useState<Liability | null>(null)
   const [assetCreating, setAssetCreating] = useState(false)
   const [liabilityCreating, setLiabilityCreating] = useState(false)
@@ -75,13 +79,21 @@ export default function GroupHubGeneric({ group, portfolioId, assetGroupId }: Pr
     return null
   }, [liabilityForm])
 
+  const cancelMoveAsset = () => {
+    setMoveAsset(null)
+    setMoveTargetGroupId('')
+    setMovePanelGroups([])
+  }
+
   const openAssetCreate = () => {
+    cancelMoveAsset()
     setAssetForm(assetEmpty)
     setAssetCreating(true)
     setAssetEditing(null)
     setBanner(null)
   }
   const openAssetEdit = (a: Asset) => {
+    cancelMoveAsset()
     setAssetForm({
       name: a.name,
       category: a.category,
@@ -105,6 +117,42 @@ export default function GroupHubGeneric({ group, portfolioId, assetGroupId }: Pr
     setAssetCreating(false)
     setAssetEditing(null)
     setSameKindGroups([])
+  }
+
+  const openMoveAsset = (a: Asset) => {
+    closeAssetForm()
+    setMoveAsset(a)
+    setMoveTargetGroupId('')
+    setMovePanelGroups([])
+    setBanner(null)
+    api.portfolios
+      .list()
+      .then((portfolios) => {
+        const groups = portfolios
+          .flatMap((p) => (p.assetGroups ?? []).map((g) => ({ ...g, portfolioName: p.name })))
+          .filter((g) => g.kind === group.kind && g.id !== assetGroupId)
+          .map((g) => ({ id: g.id, label: `${g.portfolioName} > ${g.name}` }))
+        setMovePanelGroups(groups)
+        if (groups.length > 0) setMoveTargetGroupId(groups[0].id)
+      })
+      .catch(() => {})
+  }
+
+  const confirmMoveAsset = async () => {
+    if (!moveAsset || !moveTargetGroupId) return
+    setMoveSaving(true)
+    setBanner(null)
+    try {
+      await api.assets.update(moveAsset.id, { assetGroupId: moveTargetGroupId })
+      window.dispatchEvent(new Event(PORTFOLIOS_UPDATED_EVENT))
+      setBanner({ type: 'ok', text: `${moveAsset.name} moved.` })
+      cancelMoveAsset()
+      load()
+    } catch (e: unknown) {
+      setBanner({ type: 'err', text: err(e, 'Failed to move asset.') })
+    } finally {
+      setMoveSaving(false)
+    }
   }
 
   const saveAsset = async () => {
@@ -372,6 +420,11 @@ export default function GroupHubGeneric({ group, portfolioId, assetGroupId }: Pr
                         Open
                       </Link>
                     ) : null}
+                    {group.kind === 'general' ? (
+                      <button className="btn btn-sm" type="button" onClick={() => openMoveAsset(a)}>
+                        Move
+                      </button>
+                    ) : null}
                     <button className="btn btn-sm" type="button" onClick={() => openAssetEdit(a)}>
                       Edit
                     </button>
@@ -400,6 +453,45 @@ export default function GroupHubGeneric({ group, portfolioId, assetGroupId }: Pr
             </tbody>
           </table>
         )}
+
+        {moveAsset && group.kind === 'general' ? (
+          <div className="form-panel">
+            <h3>Move asset</h3>
+            <p>
+              Move <strong>{moveAsset.name}</strong> and its <strong>valuation history</strong> to another{' '}
+              {labelForGroupKind(group.kind).toLowerCase()} asset group.
+            </p>
+            <div className="form-grid">
+              <label className="span-2">
+                Target group
+                {movePanelGroups.length === 0 ? (
+                  <p className="inline-hint">No other {labelForGroupKind(group.kind).toLowerCase()} asset groups found.</p>
+                ) : (
+                  <select value={moveTargetGroupId} onChange={(e) => setMoveTargetGroupId(e.target.value)}>
+                    {movePanelGroups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </label>
+            </div>
+            <div className="form-actions">
+              <button className="btn" type="button" onClick={cancelMoveAsset}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={() => void confirmMoveAsset()}
+                disabled={!moveTargetGroupId || moveSaving}
+              >
+                {moveSaving ? 'Moving…' : 'Move'}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section className="stack" aria-labelledby="liabilities-heading">
