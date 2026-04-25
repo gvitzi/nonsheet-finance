@@ -177,6 +177,61 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
     [rows, convert],
   )
 
+  const tableTotals = useMemo(() => {
+    let sumValue = 0
+    let sumDebt = 0
+    let sumRent = 0
+    let sumMortgage = 0
+    let sumCashflow = 0
+    let cashflowMissing = false
+
+    for (const p of rows) {
+      const v = p.latestValuation
+      if (v) sumValue += convert(v.value, v.currency)
+
+      const cont = mortgageDebtContributionsAsOf(
+        p.mortgageEntries.map((m) => ({
+          date: m.date,
+          loanId: m.loanId,
+          outstandingBalance: m.outstandingBalance,
+          currency: m.currency,
+        })),
+        new Date(),
+      )
+      for (const c of cont) sumDebt += convert(c.value, c.currency)
+
+      sumRent += p.effectiveMonthlyRent
+
+      const rentTotal = p.effectiveMonthlyRent + p.effectiveMonthlyHausgeld
+      if (p.monthlyCashflow != null && !Number.isNaN(p.monthlyCashflow)) {
+        sumMortgage += rentTotal - p.monthlyCashflow
+      } else if (p.monthlyMortgagePayment != null && !Number.isNaN(p.monthlyMortgagePayment)) {
+        sumMortgage += p.monthlyMortgagePayment
+      }
+
+      if (p.monthlyCashflow != null && !Number.isNaN(p.monthlyCashflow)) {
+        sumCashflow += p.monthlyCashflow
+      } else {
+        cashflowMissing = true
+      }
+    }
+
+    const net = sumValue - sumDebt
+    const curTitle = `Totals converted to ${displayCurrency} (value, liabilities, net). Rent and monthly columns are summed in EUR.`
+
+    return {
+      value: fmt(sumValue, displayCurrency),
+      liabilities: fmt(sumDebt, displayCurrency),
+      net: fmt(net, displayCurrency),
+      netClass: net >= 0 ? 'positive' : 'negative',
+      rent: fmtMonthly(sumRent),
+      mortgage: fmtMonthly(sumMortgage),
+      cashflow: cashflowMissing ? '—' : fmtMonthly(sumCashflow),
+      cashflowClass: cashflowMissing ? undefined : sumCashflow >= 0 ? 'positive' : 'negative',
+      title: curTitle,
+    }
+  }, [rows, convert, displayCurrency])
+
   const validation = useMemo(() => {
     if (!form.name.trim()) return 'Property name is required.'
     const nr = (v: string) => (v.trim() === '' ? null : Number(v))
@@ -409,6 +464,26 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
                   )
                 })}
               </tbody>
+              <tfoot className="re-property-table-footer">
+                <tr>
+                  <th scope="row">Totals</th>
+                  <td className="positive" title={tableTotals.title}>
+                    {tableTotals.value}
+                  </td>
+                  <td className="negative" title={tableTotals.title}>
+                    {tableTotals.liabilities}
+                  </td>
+                  <td className={tableTotals.netClass} title={tableTotals.title}>
+                    {tableTotals.net}
+                  </td>
+                  <td title="Sum of monthly rent (EUR)">{tableTotals.rent}</td>
+                  <td title="Sum of implied or stored mortgage payments (EUR)">{tableTotals.mortgage}</td>
+                  <td className={tableTotals.cashflowClass} title="Sum of stored net cashflow when every property has it">
+                    {tableTotals.cashflow}
+                  </td>
+                  <td />
+                </tr>
+              </tfoot>
             </table>
           </div>
         </>

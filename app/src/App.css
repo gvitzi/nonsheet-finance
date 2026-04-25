@@ -1968,6 +1968,31 @@ body {
   min-width: 9rem;
 }
 
+/* Global `tbody tr:last-child td { border-bottom: none }` removes the line before tfoot — restore it here. */
+.re-property-table-wrap tbody tr:last-child td {
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* Header in this block uses global thead #f8fafc; footer band is a step darker (#e2e8f0) + strong top edge */
+.re-property-table-wrap tfoot.re-property-table-footer th,
+.re-property-table-wrap tfoot.re-property-table-footer td {
+  padding: 0.85rem 0.75rem;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  line-height: 1.35;
+  color: var(--color-text);
+  text-align: left;
+  vertical-align: middle;
+  border-top: 2px solid var(--color-border);
+  border-bottom: none;
+  background-color: #e2e8f0;
+}
+
+.re-property-table-wrap tfoot.re-property-table-footer th {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 .re-property-card {
   margin: 0;
   padding: 1rem 1.05rem;
