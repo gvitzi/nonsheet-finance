@@ -2964,6 +2964,41 @@ tbody tr:last-child td {
   font-size: 0.92rem;
 }
 
+/* Securities group — holdings table: name + symbol / ISIN sub-line */
+.holding-table-name__primary {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--color-text);
+}
+
+.holding-table-name__sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.75rem;
+  margin-top: 0.2rem;
+}
+
+.holding-table-name__ticker {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.holding-table-name__isin {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  letter-spacing: 0.02em;
+}
+
+.holding-table-name__closed {
+  font-weight: 400;
+  opacity: 0.75;
+  margin-left: 0.2rem;
+}
+
 .sec-picker__chevron {
   flex-shrink: 0;
   align-self: center;
