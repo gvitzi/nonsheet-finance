@@ -290,12 +290,34 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
 
   const propertyLabel = property?.name ?? 'Property'
 
-  const latestValuation = useMemo(() => {
-    const sorted = [...valuations].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    return sorted[0] ?? null
-  }, [valuations])
+  const sortedValuations = useMemo(
+    () => [...valuations].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [valuations],
+  )
+  const sortedExpenses = useMemo(
+    () => [...expenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [expenses],
+  )
+  const sortedMortgages = useMemo(
+    () => [...mortgages].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [mortgages],
+  )
+  const legacyMortgageRows = useMemo(() => sortedMortgages.filter((m) => !m.loanId), [sortedMortgages])
+  const sortedRentPeriods = useMemo(
+    () =>
+      [...rentPeriods].sort((a, b) => {
+        const start = new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
+        if (start !== 0) return start
+        const endA = a.endDate ? new Date(a.endDate).getTime() : Number.POSITIVE_INFINITY
+        const endB = b.endDate ? new Date(b.endDate).getTime() : Number.POSITIVE_INFINITY
+        return endB - endA
+      }),
+    [rentPeriods],
+  )
 
-  const legacyMortgageRows = useMemo(() => mortgages.filter((m) => !m.loanId), [mortgages])
+  const latestValuation = useMemo(() => {
+    return sortedValuations[0] ?? null
+  }, [sortedValuations])
 
   const mortgageFinanceRead = useMemo(() => {
     const now = new Date()
@@ -1126,7 +1148,7 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
                 </tr>
               </thead>
               <tbody>
-                {valuations.map((r) => (
+                {sortedValuations.map((r) => (
                   <tr
                     key={r.id}
                     className={`property-table-row--selectable${selectedValuationId === r.id ? ' property-table-row--selected' : ''}`}
@@ -1217,7 +1239,7 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
                   </tr>
                 </thead>
                 <tbody>
-                  {expenses.map((r) => (
+                  {sortedExpenses.map((r) => (
                     <tr
                       key={r.id}
                       className={`property-table-row--selectable${selectedExpenseId === r.id ? ' property-table-row--selected' : ''}`}
@@ -1312,7 +1334,7 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
               <div className="property-loan-accordion-list">
                 {loans.map((L) => {
                   const slice = mortgageFinanceRead.perLoan.find((x) => x.loan.id === L.id)?.slice ?? null
-                  const rowsForLoan = mortgages.filter((m) => m.loanId === L.id)
+                  const rowsForLoan = sortedMortgages.filter((m) => m.loanId === L.id)
                   const debtLabel =
                     slice != null ? fmt(slice.outstandingBalance, slice.currency) : '—'
                   const isOpen = selectedLoanId === L.id
@@ -1702,7 +1724,7 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
             ) : (
               <>
                 <div className="rent-period-cards" role="list" aria-label="Rent periods">
-                  {rentPeriods.map((r) => (
+                  {sortedRentPeriods.map((r) => (
                     <article
                       key={r.id}
                       className={`rent-period-card${selectedRentPeriodId === r.id ? ' rent-period-card--selected' : ''}`}
@@ -1777,7 +1799,7 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
                       </tr>
                     </thead>
                     <tbody>
-                      {rentPeriods.map((r) => (
+                      {sortedRentPeriods.map((r) => (
                         <tr
                           key={r.id}
                           className={`property-table-row--selectable${selectedRentPeriodId === r.id ? ' property-table-row--selected' : ''}`}
