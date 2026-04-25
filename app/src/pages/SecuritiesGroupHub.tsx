@@ -719,44 +719,46 @@ export default function SecuritiesGroupHub({ group, portfolioId, assetGroupId }:
               </tr>
             </thead>
             <tbody>
-              {txRows.map((t) => {
-                const cur = t.asset?.currency ?? 'EUR'
-                const tv =
-                  !Number.isNaN(t.quantity) && !Number.isNaN(t.pricePerShare) ? t.quantity * t.pricePerShare : null
-                const isin = t.asset?.isin?.trim().toUpperCase() ?? ''
-                const sym = t.asset ? displayTickerInTable(t.asset) : '—'
-                return (
-                  <tr key={t.id}>
-                    <td>{new Date(t.date).toLocaleDateString()}</td>
-                    <td>{kindLabel(t.kind)}</td>
-                    <td>
-                      {t.asset ? (
-                        <div className="holding-table-name">
-                          <div className="holding-table-name__primary">{securityTablePrimaryName(t.asset)}</div>
-                          <div className="holding-table-name__sub">
-                            <span className="holding-table-name__ticker">{sym}</span>
-                            {isin ? <span className="holding-table-name__isin">{isin}</span> : null}
+              {[...txRows]
+                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                .map((t) => {
+                  const cur = t.asset?.currency ?? 'EUR'
+                  const tv =
+                    !Number.isNaN(t.quantity) && !Number.isNaN(t.pricePerShare) ? t.quantity * t.pricePerShare : null
+                  const isin = t.asset?.isin?.trim().toUpperCase() ?? ''
+                  const sym = t.asset ? displayTickerInTable(t.asset) : '—'
+                  return (
+                    <tr key={t.id}>
+                      <td>{new Date(t.date).toLocaleDateString()}</td>
+                      <td>{kindLabel(t.kind)}</td>
+                      <td>
+                        {t.asset ? (
+                          <div className="holding-table-name">
+                            <div className="holding-table-name__primary">{securityTablePrimaryName(t.asset)}</div>
+                            <div className="holding-table-name__sub">
+                              <span className="holding-table-name__ticker">{sym}</span>
+                              {isin ? <span className="holding-table-name__isin">{isin}</span> : null}
+                            </div>
                           </div>
-                        </div>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td>{fmtShares(t.quantity)}</td>
-                    <td>{fmtSharePrice(t.pricePerShare, cur)}</td>
-                    <td className="positive">{tv != null && !Number.isNaN(tv) ? fmtMoney(tv, cur) : '—'}</td>
-                    <td>{t.note ?? '—'}</td>
-                    <td className="actions">
-                      <button className="btn btn-sm" type="button" onClick={() => openTxEdit(t)}>
-                        Edit
-                      </button>
-                      <button className="btn btn-sm btn-danger" type="button" onClick={() => delTx(t.id)}>
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td>{fmtShares(t.quantity)}</td>
+                      <td>{fmtSharePrice(t.pricePerShare, cur)}</td>
+                      <td className="positive">{tv != null && !Number.isNaN(tv) ? fmtMoney(tv, cur) : '—'}</td>
+                      <td>{t.note ?? '—'}</td>
+                      <td className="actions">
+                        <button className="btn btn-sm" type="button" onClick={() => openTxEdit(t)}>
+                          Edit
+                        </button>
+                        <button className="btn btn-sm btn-danger" type="button" onClick={() => delTx(t.id)}>
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
             </tbody>
           </table>
         )}

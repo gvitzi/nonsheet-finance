@@ -100,6 +100,11 @@ export default function GeneralAssetView({ portfolioId, assetGroupId, assetId, g
     }
   }
 
+  const sortedValuations = useMemo(
+    () => [...valuations].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [valuations],
+  )
+
   const vValidation = useMemo(() => {
     if (!vForm.date) return 'Date is required.'
     if (Number.isNaN(Number(vForm.value))) return 'Value must be a number.'
@@ -255,7 +260,7 @@ export default function GeneralAssetView({ portfolioId, assetGroupId, assetId, g
               </tr>
             </thead>
             <tbody>
-              {valuations.map((r) => (
+              {sortedValuations.map((r) => (
                 <tr key={r.id}>
                   <td>{new Date(r.date).toLocaleDateString()}</td>
                   <td className="positive">{fmt(r.value, r.currency)}</td>
