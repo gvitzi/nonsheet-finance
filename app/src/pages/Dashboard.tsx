@@ -569,15 +569,15 @@ export default function Dashboard() {
             {fmtMoney(viewDisplayTotals.totalLiabilities, viewCurrencyCode)}
           </strong>
         </div>
-        <div className="summary-card">
+        <div className="summary-card summary-card--compact-counter">
           <span className="label">{filterActive ? 'Portfolios in view' : 'Portfolios'}</span>
           <strong>{displayPortfolioCount}</strong>
         </div>
-        <div className="summary-card">
+        <div className="summary-card summary-card--compact-counter">
           <span className="label">{filterActive ? 'Asset groups in view' : 'Asset groups'}</span>
           <strong>{displayAssetGroupCount}</strong>
         </div>
-        <div className="summary-card">
+        <div className="summary-card summary-card--compact-counter">
           <span className="label">Timeline points</span>
           <strong>{displayTimelinePointCount}</strong>
         </div>
