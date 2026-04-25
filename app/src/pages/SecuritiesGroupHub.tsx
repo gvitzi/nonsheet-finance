@@ -59,8 +59,16 @@ const fmtMoney = (n: number, currency: string) =>
 const fmtSharePrice = (n: number, currency: string) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 6, minimumFractionDigits: 2 }).format(n)
 
+/** Holdings table “Marked share price”: at most 2 fraction digits. */
+const fmtMarkedSharePriceTable = (n: number, currency: string) =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 2, minimumFractionDigits: 0 }).format(n)
+
 const fmtShares = (n: number) =>
   new Intl.NumberFormat('en-US', { maximumFractionDigits: 6, useGrouping: true }).format(n)
+
+/** Holdings table quantity: at most 2 fraction digits. */
+const fmtSharesTable = (n: number) =>
+  new Intl.NumberFormat('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 0, useGrouping: true }).format(n)
 
 function sharePriceForAsset(a: Asset): number | null {
   if (a.sharePrice != null && !Number.isNaN(a.sharePrice)) return a.sharePrice
@@ -515,8 +523,8 @@ export default function SecuritiesGroupHub({ group, portfolioId, assetGroupId }:
                           {closed ? <span className="holding-table-name__closed"> — closed</span> : null}
                         </div>
                       </td>
-                      <td>{a.position != null && !Number.isNaN(a.position) ? fmtShares(a.position) : '—'}</td>
-                      <td>{sp != null && !Number.isNaN(sp) ? fmtSharePrice(sp, a.currency) : '—'}</td>
+                      <td>{a.position != null && !Number.isNaN(a.position) ? fmtSharesTable(a.position) : '—'}</td>
+                      <td>{sp != null && !Number.isNaN(sp) ? fmtMarkedSharePriceTable(sp, a.currency) : '—'}</td>
                       <td className="positive">{mv != null && !Number.isNaN(mv) ? fmtMoney(mv, a.currency) : '—'}</td>
                       <td className="actions">
                         <button className="btn btn-sm" type="button" onClick={() => openMove(a)}>
@@ -702,7 +710,7 @@ export default function SecuritiesGroupHub({ group, portfolioId, assetGroupId }:
               <tr>
                 <th>Date</th>
                 <th>Type</th>
-                <th>Ticker</th>
+                <th>Name</th>
                 <th>Quantity</th>
                 <th>Price / sh</th>
                 <th>Trade value</th>
@@ -715,18 +723,24 @@ export default function SecuritiesGroupHub({ group, portfolioId, assetGroupId }:
                 const cur = t.asset?.currency ?? 'EUR'
                 const tv =
                   !Number.isNaN(t.quantity) && !Number.isNaN(t.pricePerShare) ? t.quantity * t.pricePerShare : null
+                const isin = t.asset?.isin?.trim().toUpperCase() ?? ''
+                const sym = t.asset ? displayTickerInTable(t.asset) : '—'
                 return (
                   <tr key={t.id}>
                     <td>{new Date(t.date).toLocaleDateString()}</td>
                     <td>{kindLabel(t.kind)}</td>
                     <td>
-                      <strong>{t.asset ? displayTickerInTable(t.asset) : '—'}</strong>
-                      {t.asset?.securityName?.trim() &&
-                      displayTickerInTable(t.asset) !== t.asset.securityName.trim() ? (
-                        <div style={{ fontWeight: 400, fontSize: '0.85rem', opacity: 0.88, marginTop: '0.15rem' }}>
-                          {t.asset.securityName.trim()}
+                      {t.asset ? (
+                        <div className="holding-table-name">
+                          <div className="holding-table-name__primary">{securityTablePrimaryName(t.asset)}</div>
+                          <div className="holding-table-name__sub">
+                            <span className="holding-table-name__ticker">{sym}</span>
+                            {isin ? <span className="holding-table-name__isin">{isin}</span> : null}
+                          </div>
                         </div>
-                      ) : null}
+                      ) : (
+                        '—'
+                      )}
                     </td>
                     <td>{fmtShares(t.quantity)}</td>
                     <td>{fmtSharePrice(t.pricePerShare, cur)}</td>
