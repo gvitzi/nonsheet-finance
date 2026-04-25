@@ -826,8 +826,7 @@ export default function Dashboard() {
               <tr>
                 <th>Portfolio</th>
                 <th>Asset group</th>
-                <th>Assets</th>
-                <th>Liabilities</th>
+                <th>Gross value</th>
                 <th>Net Worth</th>
               </tr>
             </thead>
@@ -848,9 +847,13 @@ export default function Dashboard() {
                       <span>{g.name}</span>
                     </span>
                   </td>
-                  <td className="positive">{fmtMoney(g.totalAssets, viewCurrencyCode)}</td>
-                  <td className={g.totalLiabilities === 0 ? 'amount-zero' : 'negative'}>
-                    {fmtMoney(g.totalLiabilities, viewCurrencyCode)}
+                  <td>
+                    <div className="positive">{fmtMoney(g.totalAssets, viewCurrencyCode)}</div>
+                    {g.totalLiabilities !== 0 ? (
+                      <div className="negative" style={{ fontSize: '0.85em', marginTop: '0.15rem' }}>
+                        {fmtMoney(g.totalLiabilities, viewCurrencyCode)} liabilities
+                      </div>
+                    ) : null}
                   </td>
                   <td className={g.netWorth >= 0 ? 'positive' : 'negative'}>{fmtMoney(g.netWorth, viewCurrencyCode)}</td>
                 </tr>
