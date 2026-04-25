@@ -234,6 +234,29 @@ export default function Dashboard() {
       .sort((a, b) => b.value - a.value)
   }, [data, viewCurrencyPreference, fxRates, filterPortfolioIds])
 
+  const assetTypePieSlicesView = useMemo(() => {
+    if (!data) return []
+    const from = data.displayCurrency
+    const to = (viewCurrencyPreference ?? from).trim().toUpperCase() || from
+    const sums = new Map<GroupKind, number>()
+    for (const group of filteredByAssetGroup) {
+      if (group.netWorth <= 0) continue
+      const kind = group.kind as GroupKind
+      sums.set(kind, (sums.get(kind) ?? 0) + group.netWorth)
+    }
+    return GROUP_KIND_ORDER.map((kind: GroupKind, i) => {
+      const rawValue = sums.get(kind) ?? 0
+      return {
+        id: kind,
+        name: GROUP_KIND_LABELS[kind],
+        value: convertAmountViaUsdFx(rawValue, from, to, fxRates, undefined),
+        fill: COLORS[i % COLORS.length],
+      }
+    })
+      .filter((slice) => slice.value > 0)
+      .sort((a, b) => b.value - a.value)
+  }, [data, filteredByAssetGroup, viewCurrencyPreference, fxRates])
+
   const assetGroupTableRows = useMemo(() => {
     if (!data) return []
     const from = data.displayCurrency
@@ -255,6 +278,18 @@ export default function Dashboard() {
     if (!data) return 0
     return data.byPortfolio.filter((p) => matchesPortfolioFilter(p.id)).filter((p) => p.netWorth <= 0).length
   }, [data, filterPortfolioIds])
+
+  const omittedAssetTypePieCount = useMemo(() => {
+    const visibleKinds = new Set(filteredByAssetGroup.map((g) => g.kind))
+    let omitted = 0
+    for (const kind of visibleKinds) {
+      const total = filteredByAssetGroup
+        .filter((g) => g.kind === kind)
+        .reduce((sum, g) => sum + g.netWorth, 0)
+      if (total <= 0) omitted += 1
+    }
+    return omitted
+  }, [filteredByAssetGroup])
 
   const timelineVisibleGroups = useMemo(() => {
     if (!data?.timelineChart) return []
@@ -604,6 +639,66 @@ export default function Dashboard() {
         ) : (
           <div className="panel empty-state">
             No portfolios yet. Create a portfolio to see net worth split here.
+          </div>
+        )}
+
+        {filteredByAssetGroup.length > 0 ? (
+          <div className="panel">
+            <h2>{filterActive ? 'Net worth by asset type (filtered)' : 'Net worth by asset type'}</h2>
+            {assetTypePieSlicesView.length > 0 ? (
+              <>
+                <ResponsiveContainer width="100%" height={280}>
+                  <PieChart>
+                    <Pie
+                      data={assetTypePieSlicesView}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="46%"
+                      innerRadius={52}
+                      outerRadius={88}
+                      paddingAngle={1}
+                      label={({ name, percent }) => {
+                        const pct = typeof percent === 'number' ? percent : 0
+                        return `${name} (${(pct * 100).toFixed(0)}%)`
+                      }}
+                    >
+                      {assetTypePieSlicesView.map((entry) => (
+                        <Cell key={entry.id} fill={entry.fill} stroke="var(--panel-bg, #fff)" strokeWidth={1} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      content={({ payload }) => {
+                        if (!payload?.length) return null
+                        const entry = payload[0]
+                        const total = assetTypePieSlicesView.reduce((s, p) => s + p.value, 0)
+                        const pct = total > 0 ? `${((Number(entry.value) / total) * 100).toFixed(0)}%` : ''
+                        return (
+                          <div style={{ background: 'var(--panel-bg, #fff)', border: '1px solid #e2e8f0', padding: '4px 10px', borderRadius: 4, fontSize: 13 }}>
+                            {`${String(entry.name)}  ${fmtMoney(Number(entry.value), viewCurrencyCode)}  ${pct}`}
+                          </div>
+                        )
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                {omittedAssetTypePieCount > 0 ? (
+                  <p className="inline-hint" style={{ marginTop: '0.5rem' }}>
+                    {omittedAssetTypePieCount} asset type{omittedAssetTypePieCount === 1 ? '' : 's'} with zero or lower net worth omitted from this chart.
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <div className="empty-state" style={{ padding: '1.5rem 0' }}>
+                No asset types in this view have a positive net worth, so there is nothing to chart.
+              </div>
+            )}
+          </div>
+        ) : data.byAssetGroup.length > 0 ? (
+          <div className="panel empty-state">No Asset Groups match these filters.</div>
+        ) : (
+          <div className="panel empty-state">
+            No Asset Groups yet. Create a portfolio, add an Asset Group, then add positions or balances.
           </div>
         )}
 
