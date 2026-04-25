@@ -1,7 +1,7 @@
 {
   "name": "nonsheet-finance",
   "private": true,
-  "version": "0.8.0",
+  "version": "0.9.1",
   "description": "Nonsheet Finance — local-first static SPA + single JSON document",
   "scripts": {
     "build": "npm run build:all",
