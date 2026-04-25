@@ -1502,6 +1502,12 @@ body {
   gap: 0.5rem;
 }
 
+
+.summary-card strong {
+  justify-self: center;
+  text-align: center;
+}
+
 .summary-card.highlight {
   border-color: #bfdbfe;
   background: linear-gradient(135deg, #ffffff 0%, #eff6ff 100%);
@@ -1516,6 +1522,18 @@ body {
 .summary-card span {
   color: var(--color-text-muted);
   line-height: 1.5;
+  text-align: center;
+  justify-self: center;
+}
+
+.summary-card--compact-counter {
+  max-width: 9rem;
+  justify-self: start;
+  padding-inline: 0.75rem;
+}
+
+.summary-card--compact-counter strong {
+  font-size: 1.5rem;
 }
 
 .panel-grid {
@@ -3357,11 +3375,25 @@ tbody tr:last-child td {
     padding: 0.85rem 0.5rem;
   }
 
-  .summary-grid,
   .panel-grid,
   .form-grid,
   .meta-list {
     grid-template-columns: 1fr;
+  }
+
+  .summary-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .summary-card {
+    flex: 1 1 100%;
+  }
+
+  .summary-card--compact-counter {
+    flex: 0 1 calc((100% - 2rem) / 3);
+    min-width: 0;
   }
 
   .summary-card {
