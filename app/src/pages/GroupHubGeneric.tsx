@@ -79,6 +79,17 @@ export default function GroupHubGeneric({ group, portfolioId, assetGroupId }: Pr
     return null
   }, [liabilityForm])
 
+  const assetsTableTotals = useMemo(() => {
+    let sum = 0
+    for (const a of assets) {
+      sum += convert(a.estimatedValue, a.currency)
+    }
+    return {
+      display: fmt(sum, displayCurrency),
+      title: `Totals converted to ${displayCurrency} (sum of latest value per asset).`,
+    }
+  }, [assets, convert, displayCurrency])
+
   const cancelMoveAsset = () => {
     setMoveAsset(null)
     setMoveTargetGroupId('')
@@ -397,61 +408,73 @@ export default function GroupHubGeneric({ group, portfolioId, assetGroupId }: Pr
         {assets.length === 0 ? (
           <div className="empty-state">No assets in this group yet.</div>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Category</th>
-                <th>Value (latest)</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {assets.map((a) => (
-                <tr key={a.id} className={a.archivedAt ? 'row--archived' : undefined}>
-                  <td>{a.name}</td>
-                  <td>
-                    <span className="badge">{a.category}</span>
-                  </td>
-                  <td className="positive">{fmt(a.estimatedValue, a.currency)}</td>
-                  <td className="actions">
-                    {group.kind === 'general' ? (
-                      <Link className="btn btn-sm" to={assetGroupAssetPath(portfolioId, assetGroupId, a.id)}>
-                        Open
-                      </Link>
-                    ) : null}
-                    {group.kind === 'general' ? (
-                      <button className="btn btn-sm" type="button" onClick={() => openMoveAsset(a)}>
-                        Move
-                      </button>
-                    ) : null}
-                    <button className="btn btn-sm" type="button" onClick={() => openAssetEdit(a)}>
-                      Edit
-                    </button>
-                    {a.archivedAt ? (
-                      <>
-                        <button className="btn btn-sm" type="button" onClick={() => unarchiveAsset(a.id)}>
-                          Unarchive
-                        </button>
-                        <button className="btn btn-sm btn-danger" type="button" onClick={() => delAsset(a.id)}>
-                          Delete
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button className="btn btn-sm" type="button" onClick={() => archiveAsset(a.id)}>
-                          Archive
-                        </button>
-                        <button className="btn btn-sm btn-danger" type="button" onClick={() => delAsset(a.id)}>
-                          Delete
-                        </button>
-                      </>
-                    )}
-                  </td>
+          <div className="re-property-table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Category</th>
+                  <th>Value (latest)</th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {assets.map((a) => (
+                  <tr key={a.id} className={a.archivedAt ? 'row--archived' : undefined}>
+                    <td>{a.name}</td>
+                    <td>
+                      <span className="badge">{a.category}</span>
+                    </td>
+                    <td className="positive">{fmt(a.estimatedValue, a.currency)}</td>
+                    <td className="actions">
+                      {group.kind === 'general' ? (
+                        <Link className="btn btn-sm" to={assetGroupAssetPath(portfolioId, assetGroupId, a.id)}>
+                          Open
+                        </Link>
+                      ) : null}
+                      {group.kind === 'general' ? (
+                        <button className="btn btn-sm" type="button" onClick={() => openMoveAsset(a)}>
+                          Move
+                        </button>
+                      ) : null}
+                      <button className="btn btn-sm" type="button" onClick={() => openAssetEdit(a)}>
+                        Edit
+                      </button>
+                      {a.archivedAt ? (
+                        <>
+                          <button className="btn btn-sm" type="button" onClick={() => unarchiveAsset(a.id)}>
+                            Unarchive
+                          </button>
+                          <button className="btn btn-sm btn-danger" type="button" onClick={() => delAsset(a.id)}>
+                            Delete
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button className="btn btn-sm" type="button" onClick={() => archiveAsset(a.id)}>
+                            Archive
+                          </button>
+                          <button className="btn btn-sm btn-danger" type="button" onClick={() => delAsset(a.id)}>
+                            Delete
+                          </button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="re-property-table-footer">
+                <tr>
+                  <th scope="row">Totals</th>
+                  <td />
+                  <td className="positive" title={assetsTableTotals.title}>
+                    {assetsTableTotals.display}
+                  </td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         )}
 
         {moveAsset && group.kind === 'general' ? (

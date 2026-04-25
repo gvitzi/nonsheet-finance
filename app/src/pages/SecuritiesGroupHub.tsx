@@ -254,6 +254,17 @@ export default function SecuritiesGroupHub({ group, portfolioId, assetGroupId }:
     [rows, convert],
   )
 
+  const holdingsFooterTotal = useMemo(() => {
+    let sum = 0
+    for (const a of rows) {
+      sum += convert(marketValueForAsset(a) ?? a.estimatedValue, a.currency)
+    }
+    return {
+      display: fmtMoney(sum, displayCurrency),
+      title: `Totals converted to ${displayCurrency} (sum of market value per row). Quantity and price are not additive across holdings.`,
+    }
+  }, [rows, convert, displayCurrency])
+
   // Unique securities: global stock valuations + holdings in this group without valuations
   const securityOptions = useMemo((): SecurityOption[] => {
     const seen = new Map<string, SecurityOption>()
@@ -474,48 +485,61 @@ export default function SecuritiesGroupHub({ group, portfolioId, assetGroupId }:
         {rows.length === 0 ? (
           <div className="empty-state">No holdings yet. Add a purchase below to open a line.</div>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Quantity</th>
-                <th>Marked share price</th>
-                <th>Market value</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((a) => {
-                const sp = sharePriceForAsset(a)
-                const mv = marketValueForAsset(a)
-                const closed = a.position != null && !Number.isNaN(a.position) && a.position === 0
-                const isin = a.isin?.trim().toUpperCase() ?? ''
-                const sym = displayTickerInTable(a)
-                return (
-                  <tr key={a.id}>
-                    <td>
-                      <div className="holding-table-name">
-                        <div className="holding-table-name__primary">{securityTablePrimaryName(a)}</div>
-                        <div className="holding-table-name__sub">
-                          <span className="holding-table-name__ticker">{sym}</span>
-                          {isin ? <span className="holding-table-name__isin">{isin}</span> : null}
+          <div className="re-property-table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Quantity</th>
+                  <th>Marked share price</th>
+                  <th>Market value</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((a) => {
+                  const sp = sharePriceForAsset(a)
+                  const mv = marketValueForAsset(a)
+                  const closed = a.position != null && !Number.isNaN(a.position) && a.position === 0
+                  const isin = a.isin?.trim().toUpperCase() ?? ''
+                  const sym = displayTickerInTable(a)
+                  return (
+                    <tr key={a.id}>
+                      <td>
+                        <div className="holding-table-name">
+                          <div className="holding-table-name__primary">{securityTablePrimaryName(a)}</div>
+                          <div className="holding-table-name__sub">
+                            <span className="holding-table-name__ticker">{sym}</span>
+                            {isin ? <span className="holding-table-name__isin">{isin}</span> : null}
+                          </div>
+                          {closed ? <span className="holding-table-name__closed"> — closed</span> : null}
                         </div>
-                        {closed ? <span className="holding-table-name__closed"> — closed</span> : null}
-                      </div>
-                    </td>
-                    <td>{a.position != null && !Number.isNaN(a.position) ? fmtShares(a.position) : '—'}</td>
-                    <td>{sp != null && !Number.isNaN(sp) ? fmtSharePrice(sp, a.currency) : '—'}</td>
-                    <td className="positive">{mv != null && !Number.isNaN(mv) ? fmtMoney(mv, a.currency) : '—'}</td>
-                    <td className="actions">
-                      <button className="btn btn-sm" type="button" onClick={() => openMove(a)}>
-                        Move
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                      </td>
+                      <td>{a.position != null && !Number.isNaN(a.position) ? fmtShares(a.position) : '—'}</td>
+                      <td>{sp != null && !Number.isNaN(sp) ? fmtSharePrice(sp, a.currency) : '—'}</td>
+                      <td className="positive">{mv != null && !Number.isNaN(mv) ? fmtMoney(mv, a.currency) : '—'}</td>
+                      <td className="actions">
+                        <button className="btn btn-sm" type="button" onClick={() => openMove(a)}>
+                          Move
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot className="re-property-table-footer">
+                <tr>
+                  <th scope="row">Totals</th>
+                  <td>—</td>
+                  <td>—</td>
+                  <td className="positive" title={holdingsFooterTotal.title}>
+                    {holdingsFooterTotal.display}
+                  </td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         )}
 
         {moveAsset && (
