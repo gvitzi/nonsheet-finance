@@ -33,6 +33,27 @@
   background: var(--color-page);
 }
 
+:root[data-theme='dark'] {
+  --color-page: #0f172a;
+  --color-surface: #111827;
+  --color-border: #334155;
+  --color-border-strong: #475569;
+  --color-text: #e5e7eb;
+  --color-text-muted: #94a3b8;
+  --color-text-subtle: #64748b;
+  --color-primary: #60a5fa;
+  --color-primary-hover: #93c5fd;
+  --color-primary-soft: #1e293b;
+  --color-danger-bg: #3b1219;
+  --color-danger-text: #fecaca;
+  --color-danger-border: #7f1d1d;
+  --color-success-bg: #0f2e1f;
+  --color-success-text: #bbf7d0;
+  --color-success-border: #166534;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -47,6 +68,43 @@ body {
   min-width: 0;
   background: var(--color-page);
   color: var(--color-text);
+}
+
+:root[data-theme='dark'] .summary-card.highlight {
+  border-color: #3b82f6;
+  background: linear-gradient(135deg, #111827 0%, #172554 100%);
+}
+
+:root[data-theme='dark'] .settings-readonly-value,
+:root[data-theme='dark'] input,
+:root[data-theme='dark'] select,
+:root[data-theme='dark'] textarea {
+  background: #0b1220;
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+
+:root[data-theme='dark'] thead {
+  background: #172554;
+}
+
+:root[data-theme='dark'] thead th {
+  background: #172554;
+  color: #cbd5e1;
+  border-bottom-color: #334155;
+}
+
+:root[data-theme='dark'] tfoot th,
+:root[data-theme='dark'] tfoot td,
+:root[data-theme='dark'] .re-property-table-wrap tfoot.re-property-table-footer th,
+:root[data-theme='dark'] .re-property-table-wrap tfoot.re-property-table-footer td {
+  background: #1e293b;
+  color: var(--color-text);
+  border-top-color: #334155;
+}
+
+:root[data-theme='dark'] .table tbody tr:hover {
+  background: #172033;
 }
 
 /* Single flex child under #root so titlebar + main fill the viewport (see index.css). */
@@ -2388,6 +2446,12 @@ a.re-property-card__title:focus-visible {
 }
 
 /* Settings (and similar): value shown for reference only — not an input control. */
+.theme-toggle {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.4rem;
+}
+
 .form-grid .settings-readonly-value {
   width: 100%;
   box-sizing: border-box;
