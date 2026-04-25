@@ -218,6 +218,22 @@ export default function Dashboard() {
       }))
   }, [filteredByAssetGroup, data, viewCurrencyPreference, fxRates])
 
+  const portfolioPieSlicesView = useMemo(() => {
+    if (!data) return []
+    const from = data.displayCurrency
+    const to = (viewCurrencyPreference ?? from).trim().toUpperCase() || from
+    return data.byPortfolio
+      .filter((p) => matchesPortfolioFilter(p.id))
+      .filter((p) => p.netWorth > 0)
+      .map((p, i) => ({
+        id: p.id,
+        name: p.name,
+        value: convertAmountViaUsdFx(p.netWorth, from, to, fxRates, undefined),
+        fill: p.color?.trim() || COLORS[i % COLORS.length],
+      }))
+      .sort((a, b) => b.value - a.value)
+  }, [data, viewCurrencyPreference, fxRates, filterPortfolioIds])
+
   const assetGroupTableRows = useMemo(() => {
     if (!data) return []
     const from = data.displayCurrency
@@ -234,6 +250,11 @@ export default function Dashboard() {
     () => filteredByAssetGroup.filter((g) => g.netWorth <= 0).length,
     [filteredByAssetGroup],
   )
+
+  const omittedPortfolioPieCount = useMemo(() => {
+    if (!data) return 0
+    return data.byPortfolio.filter((p) => matchesPortfolioFilter(p.id)).filter((p) => p.netWorth <= 0).length
+  }, [data, filterPortfolioIds])
 
   const timelineVisibleGroups = useMemo(() => {
     if (!data?.timelineChart) return []
@@ -528,6 +549,64 @@ export default function Dashboard() {
       </div>
 
       <div className="panel-grid">
+        {data.byPortfolio.length > 0 ? (
+          <div className="panel">
+            <h2>{filterPortfolioIds.length > 0 ? 'Net worth by portfolio (filtered)' : 'Net worth by portfolio'}</h2>
+            {portfolioPieSlicesView.length > 0 ? (
+              <>
+                <ResponsiveContainer width="100%" height={280}>
+                  <PieChart>
+                    <Pie
+                      data={portfolioPieSlicesView}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="46%"
+                      innerRadius={52}
+                      outerRadius={88}
+                      paddingAngle={1}
+                      label={({ name, percent }) => {
+                        const pct = typeof percent === 'number' ? percent : 0
+                        return `${name} (${(pct * 100).toFixed(0)}%)`
+                      }}
+                    >
+                      {portfolioPieSlicesView.map((entry) => (
+                        <Cell key={entry.id} fill={entry.fill} stroke="var(--panel-bg, #fff)" strokeWidth={1} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      content={({ payload }) => {
+                        if (!payload?.length) return null
+                        const entry = payload[0]
+                        const total = portfolioPieSlicesView.reduce((s, p) => s + p.value, 0)
+                        const pct = total > 0 ? `${((Number(entry.value) / total) * 100).toFixed(0)}%` : ''
+                        return (
+                          <div style={{ background: 'var(--panel-bg, #fff)', border: '1px solid #e2e8f0', padding: '4px 10px', borderRadius: 4, fontSize: 13 }}>
+                            {`${String(entry.name)}  ${fmtMoney(Number(entry.value), viewCurrencyCode)}  ${pct}`}
+                          </div>
+                        )
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                {omittedPortfolioPieCount > 0 ? (
+                  <p className="inline-hint" style={{ marginTop: '0.5rem' }}>
+                    {omittedPortfolioPieCount} portfolio{omittedPortfolioPieCount === 1 ? '' : 's'} with zero or lower net worth omitted from this chart.
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <div className="empty-state" style={{ padding: '1.5rem 0' }}>
+                No portfolios in this view have a positive net worth, so there is nothing to chart.
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="panel empty-state">
+            No portfolios yet. Create a portfolio to see net worth split here.
+          </div>
+        )}
+
         {filteredByAssetGroup.length > 0 ? (
           <div className="panel">
             <h2>{filterActive ? 'Net worth by Asset Group (filtered)' : 'Net worth by Asset Group'}</h2>
