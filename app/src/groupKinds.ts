@@ -20,7 +20,7 @@ export const PORTFOLIOS_UPDATED_EVENT = 'nonsheet-finance:portfolios-updated'
 /** Fired when the active wealth document was replaced from cache or a JSON import. */
 export const WEALTH_DOC_LOADED_EVENT = 'nonsheet-finance:wealth-doc-loaded'
 
-export type WealthDocLoadedSource = 'browser-cache' | 'import'
+export type WealthDocLoadedSource = 'browser-cache' | 'import' | 'demo'
 
 /** Fired when the app should surface a short-lived error row in the notifications panel. */
 export const WEALTH_APP_ERROR_NOTIFICATION_EVENT = 'nonsheet-finance:wealth-app-error-notification'
