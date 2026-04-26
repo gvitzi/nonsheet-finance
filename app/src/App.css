@@ -460,6 +460,42 @@ body {
   min-width: 0;
 }
 
+.app-titlebar__logo-link {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.15rem;
+  margin: 0;
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: inherit;
+  line-height: 0;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.app-titlebar__logo-link:hover {
+  background: var(--color-page);
+}
+
+.app-titlebar__logo-link:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.app-titlebar__logo-link--active {
+  background: var(--color-primary-soft);
+}
+
+.app-titlebar__logo {
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.65rem;
+  display: block;
+  object-fit: contain;
+  user-select: none;
+}
+
 .sidebar-toggle {
   display: flex;
   align-items: center;
@@ -479,6 +515,32 @@ body {
 .sidebar-toggle:hover {
   background: var(--color-page);
   color: var(--color-text);
+}
+
+.sidebar-nav__collapse {
+  margin: 0 0 0.55rem;
+  padding: 0 0 0.6rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sidebar-toggle--in-nav {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 0 0.65rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-sizing: border-box;
+}
+
+.sidebar-toggle--in-nav:hover {
+  background: var(--color-page);
+  border-color: var(--color-border-strong);
+}
+
+.sidebar--collapsed .sidebar-toggle--in-nav {
+  justify-content: center;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
 }
 
 .sidebar-toggle-icon {
@@ -3379,21 +3441,6 @@ tbody tr:last-child td {
     background: rgba(15, 23, 42, 0.45);
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
-  }
-
-  /* Collapsed drawer: no icon rail — fully off-canvas (desktop still uses .sidebar--collapsed width). */
-  .app-main .sidebar.sidebar--collapsed:not(.sidebar--mobile-overlay) {
-    width: 0;
-    min-width: 0;
-    max-width: 0;
-    flex-basis: 0;
-    border: none;
-    padding: 0;
-    margin: 0;
-    overflow: hidden;
-    opacity: 0;
-    pointer-events: none;
-    transition: none;
   }
 
   /* Expanded drawer: full width below titlebar */
