@@ -1,14 +1,15 @@
 # Nonsheet Finance
 
-**Nonsheet Finance** is a personal finance app that runs entirely in your browser. Your portfolios, assets, FX rates, and settings live in **one JSON file** that you own—nothing is sent to a company server.
+**Nonsheet Finance** is a personal finance app that runs entirely in your browser. Your portfolios, assets and settings live in **one JSON file** that you own—nothing is sent to a company server.
+
+---
+### Open the app - [Live Demo](https://gvitzi.github.io/nonsheet-finance/)
 
 ---
 
-### Open the app
-
-**Hosted:** [Open Nonsheet Finance](https://REPLACE-WITH-YOUR-URL) — *after you deploy `static-app`, edit this README and replace the URL with your real address (GitHub Pages, Netlify, etc.).*
-
-**Folder / zip:** if you only have a copy of the built files (often a folder named `static-app`), open **`README.txt`** inside it—usually `npx --yes serve -s .` in that folder, then use the URL the tool prints.
+- **You choose where the file lives** — The app is a static site: there is no hosted database. Your JSON file can sit on your machine or anywhere you sync folders (Google Drive, Dropbox, iCloud, etc.); the app only reads what you import and what the browser keeps for convenience.
+- **Spreadsheet-style workflow, without the sheet** — Numbers are entered and maintained by you in the UI. Think of it as a structured alternative to juggling a finance workbook in Excel or Google Sheets.
+- **AI-friendly format** — Because everything is one plain JSON document, you can use an AI assistant to parse your own document and edit the file for you.
 
 ---
 
