@@ -235,7 +235,9 @@ export function WealthStoreProvider({ children }: { children: ReactNode }) {
                 Choose your data file
               </h1>
               <p id="welcome-doc-desc" className="welcome-doc-desc">
-                This app keeps everything in one JSON file. While you work, a copy is also kept in this browser (local storage) so you can pick up where you left off after a refresh. If a saved copy exists, it is loaded automatically; otherwise import a file from disk, load the built-in demo, or start fresh.
+                This app keeps everything in one JSON file. While you work, a copy is also kept in this browser (cookies) so
+                you can pick up where you left off after a refresh. If a saved copy exists, it is loaded automatically;
+                otherwise import a file from disk, load the built-in demo, or start fresh.
               </p>
               {demoError ? <p className="welcome-doc-demo-error">{demoError}</p> : null}
               <div className="welcome-doc-actions">

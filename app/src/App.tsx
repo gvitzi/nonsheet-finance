@@ -296,7 +296,7 @@ function TitlebarCogMenu() {
             role="menuitem"
             onClick={close}
           >
-            Settings
+            Preferences
           </NavLink>
         </div>
       ) : null}
@@ -424,7 +424,7 @@ function App() {
     if (location.pathname === '/stock-valuations') return 'Stock Valuations'
     if (location.pathname === '/stock-information') return 'Stock Information'
     if (location.pathname === '/fx-rates') return 'FX rates'
-    if (location.pathname === settingsRoute.path) return 'Settings'
+    if (location.pathname === settingsRoute.path) return 'Preferences'
     if (location.pathname === '/portfolios/new') return 'New portfolio'
     if (/^\/portfolios\/[^/]+\/edit$/.test(location.pathname)) return 'Edit portfolio'
     if (/^\/portfolios\/[^/]+\/asset-groups\/new$/.test(location.pathname)) return 'New Asset Group'

@@ -3,9 +3,6 @@ import { ApiError, api } from '../api'
 import type { Settings } from '../api'
 import { applyTheme, normalizeTheme, type AppTheme } from '../theme'
 
-const DATA_HINT =
-  'The app keeps all data in one JSON document. Use the title bar: Import to load a file, Export to download a dated copy. Sync that file via Google Drive or any folder sync between devices.'
-
 function getFriendlyError(error: unknown, fallback: string) {
   if (error instanceof ApiError) {
     if (error.status >= 500) return 'The server had trouble saving your settings.'
@@ -105,12 +102,7 @@ export default function SettingsPage() {
     <div className="page">
       <div className="page-header">
         <div>
-          <h1>Settings</h1>
-          <p className="page-subtitle">
-            <strong>Base currency</strong> is the book / aggregation currency: dashboard totals and history are computed in this
-            code. <strong>Display currency</strong> is only the default selection on the Dashboard; you can still pick another
-            currency there. FX rows in your file are always quoted as the non-USD side vs USD.
-          </p>
+          <h1>Preferences</h1>
         </div>
       </div>
 
@@ -142,30 +134,10 @@ export default function SettingsPage() {
           </label>
           <label className="span-2">
             Theme
-            <div className="theme-toggle" role="radiogroup" aria-label="Theme">
-              <button
-                type="button"
-                className={`btn ${theme === 'light' ? 'btn-primary' : ''}`}
-                aria-pressed={theme === 'light'}
-                onClick={() => setTheme('light')}
-              >
-                Light
-              </button>
-              <button
-                type="button"
-                className={`btn ${theme === 'dark' ? 'btn-primary' : ''}`}
-                aria-pressed={theme === 'dark'}
-                onClick={() => setTheme('dark')}
-              >
-                Dark
-              </button>
-            </div>
-          </label>
-          <label className="span-2">
-            Data file
-            <div className="settings-readonly-value" title={DATA_HINT}>
-              {DATA_HINT}
-            </div>
+            <select value={theme} onChange={(e) => setTheme(normalizeTheme(e.target.value))} aria-label="Theme">
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
           </label>
         </div>
 
@@ -220,7 +192,7 @@ export default function SettingsPage() {
 
       <div className="form-actions" style={{ paddingLeft: '0.15rem' }}>
         <button className="btn btn-primary" onClick={save} disabled={saving || Boolean(validationError)}>
-          {saving ? 'Saving…' : 'Save settings'}
+          {saving ? 'Saving…' : 'Save preferences'}
         </button>
       </div>
     </div>
