@@ -447,16 +447,22 @@ function App() {
     <div className="app-shell">
       <header className="app-titlebar">
         <div className="app-titlebar__start">
-          <button
-            type="button"
-            className="sidebar-toggle"
-            onClick={() => setSidebarCollapsed((c) => !c)}
-            aria-expanded={!sidebarCollapsed}
-            aria-controls="app-sidebar"
-            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          <NavLink
+            to="/"
+            end
+            className={({ isActive }) => `app-titlebar__logo-link${isActive ? ' app-titlebar__logo-link--active' : ''}`}
+            aria-label="Dashboard"
+            title="Dashboard"
           >
-            <IconPanelLeft />
-          </button>
+            <img
+              className="app-titlebar__logo"
+              src={`${import.meta.env.BASE_URL}favicon.svg`.replace(/\/{2,}/g, '/')}
+              alt=""
+              width={28}
+              height={27}
+              decoding="async"
+            />
+          </NavLink>
           <div className="app-titlebar__brand">
             <span className="app-titlebar__name">Nonsheet Finance</span>
             <span className="app-titlebar__sep" aria-hidden="true">
@@ -484,9 +490,20 @@ function App() {
           id="app-sidebar"
           className={`sidebar${sidebarCollapsed ? ' sidebar--collapsed' : ''}${compactNav && !sidebarCollapsed ? ' sidebar--mobile-overlay' : ''}`}
           aria-label="Primary navigation"
-          aria-hidden={compactNav && sidebarCollapsed ? true : undefined}
         >
           <nav className="sidebar-nav">
+            <div className="sidebar-nav__collapse">
+              <button
+                type="button"
+                className="sidebar-toggle sidebar-toggle--in-nav"
+                onClick={() => setSidebarCollapsed((c) => !c)}
+                aria-expanded={!sidebarCollapsed}
+                aria-controls="app-sidebar"
+                title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              >
+                <IconPanelLeft />
+              </button>
+            </div>
             <ul className="nav-list">
               <li>
                 <NavLink
@@ -607,7 +624,7 @@ function App() {
             </ul>
 
             <div className="nav-section-header nav-section-header--secondary">
-              <p className="nav-section-label nav-section-label--row">{'Securities & FX'}</p>
+              <p className="nav-section-label nav-section-label--row">Market Data</p>
             </div>
             <ul className="nav-list nav-list--tight">
               <li>
