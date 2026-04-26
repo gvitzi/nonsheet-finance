@@ -133,10 +133,9 @@ export function WealthStoreProvider({ children }: { children: ReactNode }) {
   // In-app navigation when dirty is not blocked; closing/reloading the tab is still guarded via `beforeunload`.
 
   const newDocument = useCallback(() => {
-    if (isWealthDocStoreDirty() && !window.confirm('Discard unsaved changes and start a new file?')) return
-    setWealthFileHandle(null)
-    replaceWealthDocument(createEmptyWealthDocument(), { markDirty: false })
-    window.dispatchEvent(new CustomEvent(PORTFOLIOS_UPDATED_EVENT))
+    if (isWealthDocStoreDirty() && !window.confirm('Discard unsaved changes and return to the file chooser?')) return
+    clearBrowserCacheDocument()
+    window.location.reload()
   }, [])
 
   const openFile = useCallback((opts?: { onLoaded?: () => void }) => {
