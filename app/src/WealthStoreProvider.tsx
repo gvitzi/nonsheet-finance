@@ -49,6 +49,9 @@ function downloadJson(filename: string, text: string) {
 export function WealthStoreProvider({ children }: { children: ReactNode }) {
   const [dirty, setDirty] = useState(isWealthDocStoreDirty)
   /** Until true, user must pick a JSON file or start an empty document (welcome overlay). */
+  const [demoLoading, setDemoLoading] = useState(false)
+  const [demoError, setDemoError] = useState<string | null>(null)
+
   const [documentSessionReady, setDocumentSessionReady] = useState(() => {
     const cached = readBrowserCacheDocument()
     if (!cached) return false
@@ -173,6 +176,33 @@ export function WealthStoreProvider({ children }: { children: ReactNode }) {
     setDocumentSessionReady(true)
   }, [])
 
+  const loadDemoData = useCallback(async () => {
+    if (isWealthDocStoreDirty() && !window.confirm('Replace current data? Unsaved changes will be lost.')) return
+    setDemoError(null)
+    setDemoLoading(true)
+    try {
+      const url = `${import.meta.env.BASE_URL}demo-wealth.json`.replace(/\/{2,}/g, '/')
+      const res = await fetch(url, { cache: 'no-store' })
+      if (!res.ok) throw new Error(res.status === 404 ? 'Demo file not found.' : res.statusText || String(res.status))
+      const text = await res.text()
+      const parsed = parseWealthDocument(JSON.parse(text) as unknown)
+      setWealthFileHandle(null)
+      replaceWealthDocument(parsed, { markDirty: false })
+      window.dispatchEvent(new CustomEvent(PORTFOLIOS_UPDATED_EVENT))
+      window.dispatchEvent(
+        new CustomEvent<{ source: WealthDocLoadedSource }>(WEALTH_DOC_LOADED_EVENT, {
+          detail: { source: 'demo' },
+        }),
+      )
+      setDocumentSessionReady(true)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Could not load demo data.'
+      setDemoError(msg)
+    } finally {
+      setDemoLoading(false)
+    }
+  }, [])
+
   const exportFile = useCallback(async () => {
     const raw = stringifyWealthDocument(getWealthDocument())
     const d = new Date()
@@ -206,18 +236,29 @@ export function WealthStoreProvider({ children }: { children: ReactNode }) {
                 Choose your data file
               </h1>
               <p id="welcome-doc-desc" className="welcome-doc-desc">
-                This app keeps everything in one JSON file. While you work, a copy is also kept in this browser (local storage) so you can pick up where you left off after a refresh. If a saved copy exists, it is loaded automatically; otherwise import a file from disk or start fresh.
+                This app keeps everything in one JSON file. While you work, a copy is also kept in this browser (local storage) so you can pick up where you left off after a refresh. If a saved copy exists, it is loaded automatically; otherwise import a file from disk, load the built-in demo, or start fresh.
               </p>
+              {demoError ? <p className="welcome-doc-demo-error">{demoError}</p> : null}
               <div className="welcome-doc-actions">
                 <button
                   type="button"
                   className="btn btn-primary welcome-doc-btn"
                   ref={welcomePrimaryRef}
+                  disabled={demoLoading}
                   onClick={() => openFile({ onLoaded: () => setDocumentSessionReady(true) })}
                 >
                   Import JSON file…
                 </button>
-                <button type="button" className="btn welcome-doc-btn" onClick={beginEmptyDocumentSession}>
+                <button
+                  type="button"
+                  className="btn welcome-doc-btn welcome-doc-btn--stack"
+                  disabled={demoLoading}
+                  onClick={() => void loadDemoData()}
+                >
+                  <span className="welcome-doc-btn__label">Load demo data</span>
+                  <span className="welcome-doc-btn__sub">Sample portfolio (downloaded only when you click)</span>
+                </button>
+                <button type="button" className="btn welcome-doc-btn" disabled={demoLoading} onClick={beginEmptyDocumentSession}>
                   Start with an empty document
                 </button>
               </div>

@@ -1,0 +1,313 @@
+{
+  "schemaVersion": 1,
+  "meta": {
+    "title": "Nonsheet Finance — demo",
+    "savedAt": "2026-04-01T12:00:00.000Z"
+  },
+  "settings": {
+    "id": "demo-settings",
+    "baseCurrency": "EUR",
+    "displayCurrency": "EUR",
+    "staleAssetWarningMonths": 3,
+    "mortgageLoanEndWarningMonths": 3,
+    "createdAt": "2026-01-01T12:00:00.000Z",
+    "updatedAt": "2026-04-01T12:00:00.000Z"
+  },
+  "portfolios": [
+    {
+      "id": "demo-pf-main",
+      "name": "Demo household",
+      "description": "Sample data for exploring portfolios, securities, real estate, and cash.",
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-04-01T12:00:00.000Z"
+    }
+  ],
+  "assetGroups": [
+    {
+      "id": "demo-ag-securities",
+      "portfolioId": "demo-pf-main",
+      "name": "Brokerage",
+      "description": "Securities, trades, and stock marks.",
+      "kind": "investments",
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-04-01T12:00:00.000Z"
+    },
+    {
+      "id": "demo-ag-re",
+      "portfolioId": "demo-pf-main",
+      "name": "My Real Estate",
+      "description": "Rental property with loan, marks, rent, and expenses.",
+      "kind": "real_estate",
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-04-01T12:00:00.000Z"
+    },
+    {
+      "id": "demo-ag-gen",
+      "portfolioId": "demo-pf-main",
+      "name": "Cash & liabilities",
+      "description": "General assets with valuation history and a sample liability.",
+      "kind": "general",
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-04-01T12:00:00.000Z"
+    }
+  ],
+  "assets": [
+    {
+      "id": "demo-ast-aapl",
+      "assetGroupId": "demo-ag-securities",
+      "name": "AAPL",
+      "category": "securities",
+      "estimatedValue": 3150,
+      "currency": "USD",
+      "isin": "US0378331005",
+      "position": 15,
+      "sharePrice": 210,
+      "note": "Demo holding — Apple Inc.",
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-04-01T12:00:00.000Z"
+    },
+    {
+      "id": "demo-ast-msft",
+      "assetGroupId": "demo-ag-securities",
+      "name": "MSFT",
+      "category": "securities",
+      "estimatedValue": 2000,
+      "currency": "USD",
+      "isin": "US5949181045",
+      "position": 5,
+      "sharePrice": 400,
+      "note": "Demo holding — Microsoft",
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-04-01T12:00:00.000Z"
+    },
+    {
+      "id": "demo-ast-cash",
+      "assetGroupId": "demo-ag-gen",
+      "name": "High-yield savings",
+      "category": "savings",
+      "estimatedValue": 25000,
+      "currency": "EUR",
+      "note": "General asset with dated marks (open asset to edit marks).",
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-04-01T12:00:00.000Z"
+    }
+  ],
+  "liabilities": [
+    {
+      "id": "demo-liab-card",
+      "assetGroupId": "demo-ag-gen",
+      "name": "Credit card",
+      "category": "card",
+      "outstandingBalance": 1200,
+      "currency": "EUR",
+      "note": "Sample liability in the same group as cash.",
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-04-01T12:00:00.000Z"
+    }
+  ],
+  "properties": [
+    {
+      "id": "demo-prp-berlin",
+      "assetGroupId": "demo-ag-re",
+      "name": "Riverside apartment",
+      "description": "Demo rental — valuations, mortgage, loan metadata, rent period, expenses.",
+      "address": "Demo Street 1, Berlin",
+      "monthlyRent": 1450,
+      "monthlyMortgagePayment": 1180,
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-04-01T12:00:00.000Z"
+    }
+  ],
+  "propertyValuations": [
+    {
+      "id": "demo-pv-1",
+      "propertyId": "demo-prp-berlin",
+      "date": "2024-06-01T12:00:00.000Z",
+      "value": 365000,
+      "currency": "EUR",
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-01-01T12:00:00.000Z"
+    },
+    {
+      "id": "demo-pv-2",
+      "propertyId": "demo-prp-berlin",
+      "date": "2026-03-01T12:00:00.000Z",
+      "value": 400000,
+      "currency": "EUR",
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-04-01T12:00:00.000Z"
+    }
+  ],
+  "propertyLoans": [
+    {
+      "id": "demo-loan-1",
+      "propertyId": "demo-prp-berlin",
+      "name": "Primary mortgage",
+      "startDate": "2019-04-01",
+      "endDate": "2026-07-15",
+      "interestAnnualPercent": 3.2,
+      "originalLoanAmount": 300000,
+      "amortizationAnnualPercent": 2.0,
+      "remainingDebtAfterFixedPeriod": 255000,
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-04-01T12:00:00.000Z"
+    }
+  ],
+  "propertyMortgages": [
+    {
+      "id": "demo-pm-1",
+      "propertyId": "demo-prp-berlin",
+      "loanId": "demo-loan-1",
+      "date": "2026-04-01T12:00:00.000Z",
+      "outstandingBalance": 270000,
+      "currency": "EUR",
+      "principalMonthlyPayment": 720,
+      "interestMonthlyPayment": 460,
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-04-01T12:00:00.000Z"
+    }
+  ],
+  "propertyExpenses": [
+    {
+      "id": "demo-pe-1",
+      "propertyId": "demo-prp-berlin",
+      "date": "2026-03-15T12:00:00.000Z",
+      "name": "Elevator maintenance",
+      "description": "Annual reserve contribution",
+      "amount": 890,
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-04-01T12:00:00.000Z"
+    }
+  ],
+  "propertyRentPeriods": [
+    {
+      "id": "demo-rp-1",
+      "propertyId": "demo-prp-berlin",
+      "startDate": "2025-01-01",
+      "endDate": null,
+      "rent": 1450,
+      "hausgeld": 220,
+      "tenantNames": ["Demo Tenant GmbH"],
+      "notes": "Open-ended lease for demo.",
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-04-01T12:00:00.000Z"
+    }
+  ],
+  "assetValuations": [
+    {
+      "id": "demo-av-1",
+      "assetId": "demo-ast-cash",
+      "date": "2025-01-01T12:00:00.000Z",
+      "value": 22000,
+      "currency": "EUR",
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-01-01T12:00:00.000Z"
+    },
+    {
+      "id": "demo-av-2",
+      "assetId": "demo-ast-cash",
+      "date": "2026-04-01T12:00:00.000Z",
+      "value": 25000,
+      "currency": "EUR",
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-04-01T12:00:00.000Z"
+    }
+  ],
+  "securityInfo": [
+    {
+      "isin": "US0378331005",
+      "ticker": "AAPL",
+      "name": "Apple Inc.",
+      "currency": "USD",
+      "updatedAt": "2026-04-01T12:00:00.000Z"
+    },
+    {
+      "isin": "US5949181045",
+      "ticker": "MSFT",
+      "name": "Microsoft Corporation",
+      "currency": "USD",
+      "updatedAt": "2026-04-01T12:00:00.000Z"
+    }
+  ],
+  "securityValuations": [
+    {
+      "id": "US0378331005::2024-01-02::demo-ast-aapl",
+      "assetId": "demo-ast-aapl",
+      "isin": "US0378331005",
+      "date": "2024-01-02T12:00:00.000Z",
+      "sharePrice": 185.5,
+      "currency": "USD",
+      "note": "Earlier mark",
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-01-01T12:00:00.000Z"
+    },
+    {
+      "id": "US0378331005::2026-04-01::demo-ast-aapl",
+      "assetId": "demo-ast-aapl",
+      "isin": "US0378331005",
+      "date": "2026-04-01T12:00:00.000Z",
+      "sharePrice": 210,
+      "currency": "USD",
+      "note": "Latest mark (drives dashboard)",
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-04-01T12:00:00.000Z"
+    },
+    {
+      "id": "US5949181045::2025-06-01::demo-ast-msft",
+      "assetId": "demo-ast-msft",
+      "isin": "US5949181045",
+      "date": "2025-06-01T12:00:00.000Z",
+      "sharePrice": 380,
+      "currency": "USD",
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-01-01T12:00:00.000Z"
+    },
+    {
+      "id": "US5949181045::2026-04-01::demo-ast-msft",
+      "assetId": "demo-ast-msft",
+      "isin": "US5949181045",
+      "date": "2026-04-01T12:00:00.000Z",
+      "sharePrice": 400,
+      "currency": "USD",
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-04-01T12:00:00.000Z"
+    }
+  ],
+  "securityTransactions": [
+    {
+      "id": "demo-tx-1",
+      "assetGroupId": "demo-ag-securities",
+      "assetId": "demo-ast-aapl",
+      "date": "2023-06-01T12:00:00.000Z",
+      "kind": "purchase",
+      "quantity": 15,
+      "pricePerShare": 180,
+      "note": "Opening position",
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-01-01T12:00:00.000Z"
+    },
+    {
+      "id": "demo-tx-2",
+      "assetGroupId": "demo-ag-securities",
+      "assetId": "demo-ast-msft",
+      "date": "2024-02-10T12:00:00.000Z",
+      "kind": "purchase",
+      "quantity": 5,
+      "pricePerShare": 390,
+      "note": null,
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-01-01T12:00:00.000Z"
+    }
+  ],
+  "fxRates": [
+    {
+      "id": "demo-fx-eurusd",
+      "date": "2026-04-01",
+      "fromCurrency": "EUR",
+      "toCurrency": "USD",
+      "rate": 1.09,
+      "createdAt": "2026-01-01T12:00:00.000Z",
+      "updatedAt": "2026-04-01T12:00:00.000Z"
+    }
+  ]
+}

@@ -15,9 +15,9 @@ import { getWealthDocument, subscribeWealthDocStore } from './wealthDocStore'
 import { useWealthFile } from './WealthStoreProvider'
 
 function messageForDocLoaded(source: WealthDocLoadedSource): string {
-  return source === 'browser-cache'
-    ? 'Data loaded from local browser cache'
-    : 'Data loaded from imported file'
+  if (source === 'browser-cache') return 'Data loaded from local browser cache'
+  if (source === 'demo') return 'Demo data loaded'
+  return 'Data loaded from imported file'
 }
 
 function IconBell() {
