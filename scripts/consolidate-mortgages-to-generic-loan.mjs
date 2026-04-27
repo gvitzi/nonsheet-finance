@@ -5,9 +5,8 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 
-const INPUT = process.argv[2] ?? 'c:/Users/gilvi/Downloads/nonsheet-finance-2026-04-25_01_18.json'
-const OUTPUT =
-  process.argv[3] ?? 'c:/Users/gilvi/Downloads/nonsheet-finance-2026-04-25_01_18-generic-mortgage.json'
+const INPUT = process.argv[2] ?? './input.json'
+const OUTPUT = process.argv[3] ?? './output-generic-mortgage.json'
 
 const now = new Date().toISOString()
 /** Generic maturity placeholder when unknown (schema requires endDate). */

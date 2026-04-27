@@ -8,9 +8,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-const MIGRATED = 'c:/Users/gilvi/Downloads/nonsheet-finance-2026-04-24_23_54.migrated.json'
-const HTML_DIR = 'c:/Users/gilvi/Downloads/net-worth-unzipped'
-const OUT = 'c:/Users/gilvi/Downloads/nonsheet-db-2026-04-25_00_00-mortgage-data.json'
+const MIGRATED = './input.migrated.json'
+const HTML_DIR = './net-worth-unzipped'
+const OUT = './output-mortgage-data.json'
 
 function stripCell(html) {
   if (!html) return ''
