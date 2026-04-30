@@ -408,7 +408,7 @@ export default function GroupHubGeneric({ group, portfolioId, assetGroupId }: Pr
         {assets.length === 0 ? (
           <div className="empty-state">No assets in this group yet.</div>
         ) : (
-          <div className="re-property-table-wrap">
+          <div className="general-assets-table-wrap">
             <table className="table">
               <thead>
                 <tr>

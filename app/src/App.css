@@ -2105,20 +2105,23 @@ body {
   display: none;
 }
 
-.re-property-table-wrap {
+.re-property-table-wrap,
+.general-assets-table-wrap {
   overflow-x: auto;
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
   background: var(--color-surface);
 }
 
-.re-property-table-wrap .table {
+.re-property-table-wrap .table,
+.general-assets-table-wrap .table {
   margin: 0;
   border: none;
   border-radius: 0;
 }
 
-.re-property-table-wrap td.actions {
+.re-property-table-wrap td.actions,
+.general-assets-table-wrap td.actions {
   min-width: 9rem;
 }
 
@@ -2236,6 +2239,10 @@ a.re-property-card__title:focus-visible {
 
   .re-property-table-wrap {
     display: none;
+  }
+
+  .general-assets-table-wrap {
+    display: block;
   }
 }
 
