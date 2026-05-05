@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import {
   Tooltip,
   ResponsiveContainer,
@@ -35,7 +35,22 @@ function getFriendlyError(error: unknown) {
   return 'Failed to load dashboard.'
 }
 
+const MOBILE_MQ = '(max-width: 767px)'
+
+function useMediaQuery(query: string): boolean {
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      const mq = window.matchMedia(query)
+      mq.addEventListener('change', onStoreChange)
+      return () => mq.removeEventListener('change', onStoreChange)
+    },
+    () => window.matchMedia(query).matches,
+    () => false,
+  )
+}
+
 export default function Dashboard() {
+  const isMobile = useMediaQuery(MOBILE_MQ)
   const [data, setData] = useState<DashboardSummary | null>(null)
   const [fxRates, setFxRates] = useState<FxRateRecord[]>([])
   const [error, setError] = useState('')
@@ -773,12 +788,14 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis dataKey="date" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip
-                    formatter={(v, name) => {
-                      const n = Number(v)
-                      return [fmtMoney(n, viewCurrencyCode), typeof name === 'string' ? name : 'Value']
-                    }}
-                  />
+                  {!isMobile ? (
+                    <Tooltip
+                      formatter={(v, name) => {
+                        const n = Number(v)
+                        return [fmtMoney(n, viewCurrencyCode), typeof name === 'string' ? name : 'Value']
+                      }}
+                    />
+                  ) : null}
                   <Legend wrapperStyle={{ fontSize: '0.78rem' }} />
                   {timelineVisibleGroups.map((g, i) => (
                     <Line
