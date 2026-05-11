@@ -195,12 +195,11 @@ function serializeProperty(doc: WealthDocument, p: (typeof doc.properties)[0]): 
   const active = activeRentPeriodForProperty(doc.propertyRentPeriods ?? [], p.id, localCalendarYmd())
   const effectiveMonthlyRent = active ? active.rent : 0
   const effectiveMonthlyHausgeld = active ? active.hausgeld : 0
-  const rentTotal = effectiveMonthlyRent + effectiveMonthlyHausgeld
   return {
     ...p,
     effectiveMonthlyRent,
     effectiveMonthlyHausgeld,
-    monthlyCashflow: derivedMonthlyCashflow(rentTotal, mortgagePaymentForCashflow(doc, p)),
+    monthlyCashflow: derivedMonthlyCashflow(effectiveMonthlyRent, mortgagePaymentForCashflow(doc, p)),
     assetGroup: ag ? { id: ag.id, name: ag.name, kind: ag.kind } : undefined,
   } as Property
 }
