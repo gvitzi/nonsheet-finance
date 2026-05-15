@@ -14,7 +14,7 @@ export function decodeMarkId(id: string): { isin: string; dateKey: string } | nu
   return { isin, dateKey }
 }
 
-/** `ISIN::date::assetId` (preferred) or legacy `ISIN::date`. */
+/** Accept legacy `ISIN::date::assetId` ids, but canonical ids are now `ISIN::date`. */
 export function decodeSecurityValuationId(id: string): { isin: string; dateKey: string; assetId?: string } | null {
   const parts = id.split(MARK_ID_SEP)
   if (parts.length >= 3) {
@@ -28,7 +28,7 @@ export function decodeSecurityValuationId(id: string): { isin: string; dateKey: 
   return d ? { ...d } : null
 }
 
-/** Deterministic id: one security valuation row per (ISIN, date, asset). */
-export function securityValuationIdForAsset(isin: string, dateKey: string, assetId: string): string {
-  return `${encodeMarkId(isin, dateKey)}${MARK_ID_SEP}${assetId}`
+/** Deterministic id: one security valuation row per (ISIN, date). */
+export function securityValuationIdForAsset(isin: string, dateKey: string, _assetId?: string): string {
+  return encodeMarkId(isin, dateKey)
 }

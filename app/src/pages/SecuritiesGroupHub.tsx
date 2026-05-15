@@ -16,12 +16,11 @@ function todayIsoDate() {
 }
 
 type SecurityOption = {
-  assetId: string
+  isin: string
   /** Short symbol (from reference data or holding name). */
   ticker: string
   /** Long security / issuer name when known; omitted from layout when null or same as ticker. */
   issuerName: string | null
-  isin: string | null
   currency: string
 }
 
@@ -30,7 +29,7 @@ function labelsForSecurityRow(src: {
   isin?: string | null
   ticker?: string | null
   securityName?: string | null
-}): Pick<SecurityOption, 'ticker' | 'issuerName' | 'isin'> {
+}): { ticker: string; issuerName: string | null; isin: string | null } {
   const ticker = (src.ticker?.trim() || src.name).trim()
   const issuerRaw = src.securityName?.trim()
   const issuerName = issuerRaw && issuerRaw !== ticker ? issuerRaw : null
@@ -39,7 +38,7 @@ function labelsForSecurityRow(src: {
 }
 
 type TxFormState = {
-  valAssetId: string
+  valIsin: string
   assetId: string
   kind: SecurityTxKind
   date: string
@@ -50,7 +49,7 @@ type TxFormState = {
 }
 
 function txFormEmpty(): TxFormState {
-  return { valAssetId: '', assetId: '', kind: 'purchase', date: todayIsoDate(), quantity: '', pricePerShare: '', priceManual: false, note: '' }
+  return { valIsin: '', assetId: '', kind: 'purchase', date: todayIsoDate(), quantity: '', pricePerShare: '', priceManual: false, note: '' }
 }
 
 const fmtMoney = (n: number, currency: string) =>
@@ -103,7 +102,7 @@ function SecurityPicker({
 }: {
   options: SecurityOption[]
   value: string
-  onChange: (assetId: string) => void
+  onChange: (isin: string) => void
   disabled?: boolean
 }) {
   const [open, setOpen] = useState(false)
@@ -122,7 +121,7 @@ function SecurityPicker({
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
-  const selected = options.find((o) => o.assetId === value)
+  const selected = options.find((o) => o.isin === value)
   const q = search.trim().toLowerCase()
 
   const filtered = q
@@ -171,12 +170,12 @@ function SecurityPicker({
             ) : (
               filtered.map((o) => (
                 <li
-                  key={o.assetId}
-                  className={`sec-picker__option${o.assetId === value ? ' sec-picker__option--active' : ''}`}
+                  key={o.isin}
+                  className={`sec-picker__option${o.isin === value ? ' sec-picker__option--active' : ''}`}
                   role="option"
-                  aria-selected={o.assetId === value}
+                  aria-selected={o.isin === value}
                   onMouseDown={() => {
-                    onChange(o.assetId)
+                    onChange(o.isin)
                     setOpen(false)
                     setSearch('')
                   }}
@@ -277,19 +276,20 @@ export default function SecuritiesGroupHub({ group, portfolioId, assetGroupId }:
   const securityOptions = useMemo((): SecurityOption[] => {
     const seen = new Map<string, SecurityOption>()
     for (const v of allValuations) {
-      if (!v.asset || seen.has(v.assetId)) continue
+      if (!v.asset || seen.has(v.isin)) continue
       const labels = labelsForSecurityRow(v.asset)
-      seen.set(v.assetId, {
-        assetId: v.assetId,
-        ...labels,
-        currency: v.asset.currency,
+      seen.set(v.isin, {
+        isin: v.isin,
+        ticker: labels.ticker,
+        issuerName: labels.issuerName,
+        currency: v.currency,
       })
     }
     for (const a of rows) {
-      if (!seen.has(a.id)) {
-        const labels = labelsForSecurityRow(a)
-        seen.set(a.id, { assetId: a.id, ...labels, currency: a.currency })
-      }
+      const isin = a.isin?.trim().toUpperCase()
+      if (!isin || seen.has(isin)) continue
+      const labels = labelsForSecurityRow(a)
+      seen.set(isin, { isin, ticker: labels.ticker, issuerName: labels.issuerName, currency: a.currency })
     }
     return Array.from(seen.values()).sort((a, b) => {
       const c = a.ticker.localeCompare(b.ticker)
@@ -299,19 +299,19 @@ export default function SecuritiesGroupHub({ group, portfolioId, assetGroupId }:
   }, [allValuations, rows])
 
   // Auto-fill price from latest valuation on or before the trade date (only when not manually set)
-  const { valAssetId, date: formDate } = txForm
+  const { valIsin, date: formDate } = txForm
   useEffect(() => {
-    if (!valAssetId || !formDate) return
+    if (!valIsin || !formDate) return
     const matching = allValuations
-      .filter((v) => v.assetId === valAssetId && v.date.slice(0, 10) <= formDate)
+      .filter((v) => v.isin === valIsin && v.date.slice(0, 10) <= formDate)
       .sort((a, b) => b.date.localeCompare(a.date))
     setTxForm((f) => ({ ...f, pricePerShare: matching[0] ? String(matching[0].sharePrice) : '', priceManual: false }))
-  }, [valAssetId, formDate, allValuations])
+  }, [valIsin, formDate, allValuations])
 
-  const isNewToGroup = !txForm.assetId && Boolean(txForm.valAssetId)
+  const isNewToGroup = !txForm.assetId && Boolean(txForm.valIsin)
 
   const txValidation = useMemo(() => {
-    if (!txForm.valAssetId) return 'Select a security.'
+    if (!txForm.valIsin) return 'Select a security.'
     if (!txForm.date) return 'Date is required.'
     if (Number.isNaN(Number(txForm.quantity)) || Number(txForm.quantity) <= 0)
       return 'Quantity must be a positive number.'
@@ -329,11 +329,11 @@ export default function SecuritiesGroupHub({ group, portfolioId, assetGroupId }:
     setBanner(null)
   }
 
-  const applySecurityPick = (pickedAssetId: string) => {
-    const existingInGroup = rows.find((r) => r.id === pickedAssetId)
+  const applySecurityPick = (pickedIsin: string) => {
+    const existingInGroup = rows.find((r) => r.isin?.trim().toUpperCase() === pickedIsin)
     setTxForm((f) => ({
       ...f,
-      valAssetId: pickedAssetId,
+      valIsin: pickedIsin,
       assetId: existingInGroup ? existingInGroup.id : '',
       kind: 'purchase',
       pricePerShare: '', // filled by effect
@@ -342,8 +342,9 @@ export default function SecuritiesGroupHub({ group, portfolioId, assetGroupId }:
   }
 
   const openTxEdit = (t: SecurityTransaction) => {
+    const holding = rows.find((r) => r.id === t.assetId)
     setTxForm({
-      valAssetId: t.assetId,
+      valIsin: holding?.isin?.trim().toUpperCase() ?? '',
       assetId: t.assetId,
       kind: t.kind,
       date: t.date.slice(0, 10),
@@ -374,12 +375,12 @@ export default function SecuritiesGroupHub({ group, portfolioId, assetGroupId }:
       const iso = new Date(txForm.date + 'T12:00:00').toISOString()
       let assetId = txForm.assetId
 
-      if (!txEditing && !assetId && txForm.valAssetId) {
-        const opt = securityOptions.find((o) => o.assetId === txForm.valAssetId)!
+      if (!txEditing && !assetId && txForm.valIsin) {
+        const opt = securityOptions.find((o) => o.isin === txForm.valIsin)!
         const created = await api.assets.create({
           name: opt.ticker,
           category: SECURITIES_CATEGORY,
-          isin: opt.isin ?? null,
+          isin: opt.isin,
           position: 0,
           estimatedValue: 0,
           currency: opt.currency,
@@ -401,7 +402,7 @@ export default function SecuritiesGroupHub({ group, portfolioId, assetGroupId }:
       else {
         await api.securityTransactions.create({ assetGroupId, ...body })
         if (txForm.priceManual) {
-          await api.securityValuations.create({ assetId, date: iso, sharePrice: parseFloat(txForm.pricePerShare) }, assetGroupId)
+          await api.securityValuations.create({ isin: txForm.valIsin, date: iso, sharePrice: parseFloat(txForm.pricePerShare) }, assetGroupId)
         }
       }
       setBanner({ type: 'ok', text: txEditing ? 'Trade updated.' : 'Trade recorded.' })
@@ -610,13 +611,13 @@ export default function SecuritiesGroupHub({ group, portfolioId, assetGroupId }:
                 Security *
                 <SecurityPicker
                   options={securityOptions}
-                  value={txForm.valAssetId}
+                  value={txForm.valIsin}
                   onChange={applySecurityPick}
                   disabled={Boolean(txEditing)}
                 />
               </label>
 
-              {!txEditing && txForm.valAssetId ? (
+              {!txEditing && txForm.valIsin ? (
                 <label className="span-2">
                   Type *
                   <div style={{ display: 'flex', gap: '1rem', marginTop: '0.35rem' }}>

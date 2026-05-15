@@ -242,8 +242,7 @@ export type SecurityInfoRecordInput = {
 
 export interface SecurityValuation {
   id: string
-  assetId: string
-  isin?: string
+  isin: string
   date: string
   sharePrice: number
   currency: string
@@ -268,7 +267,7 @@ export interface SecurityValuation {
 }
 
 export type SecurityValuationInput = {
-  assetId: string
+  isin: string
   date: string
   sharePrice: number
   currency?: string
