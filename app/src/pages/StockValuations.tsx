@@ -8,14 +8,15 @@ import { PORTFOLIOS_UPDATED_EVENT } from '../groupKinds'
 import { displayTickerInTable, stockValuationNameDisplay } from '../securityDisplay'
 
 type HoldingOption = {
-  assetId: string
-  assetGroupId: string
-  portfolioId: string
+  isin: string
+  assetId?: string
+  assetGroupId?: string
+  portfolioId?: string
   label: string
 }
 
 type ValFormState = {
-  assetId: string
+  isin: string
   date: string
   sharePrice: string
   note: string
@@ -30,7 +31,7 @@ function todayIsoDate() {
 }
 
 function valFormEmpty(): ValFormState {
-  return { assetId: '', date: todayIsoDate(), sharePrice: '', note: '' }
+  return { isin: '', date: todayIsoDate(), sharePrice: '', note: '' }
 }
 
 const fmtSharePrice = (n: number, currency: string) =>
@@ -43,22 +44,32 @@ function err(e: unknown, fallback: string) {
 }
 
 async function loadAllSecurityHoldings(): Promise<HoldingOption[]> {
-  const portfolios = await api.portfolios.list()
-  const out: HoldingOption[] = []
+  const [portfolios, infoRows] = await Promise.all([api.portfolios.list(), api.securityInfo.list()])
+  const byIsin = new Map<string, HoldingOption>()
+  for (const r of infoRows) {
+    const isin = r.isin.trim().toUpperCase()
+    byIsin.set(isin, {
+      isin,
+      label: `${r.ticker} — ${r.name} (${isin})`,
+    })
+  }
   for (const p of portfolios) {
     for (const g of (p.assetGroups ?? []).filter((ag) => ag.kind === 'investments')) {
       const assets = await api.assets.list(g.id)
-      for (const a of assets.filter((x) => x.category === 'securities')) {
+      for (const a of assets.filter((x) => x.category === 'securities' && x.isin?.trim())) {
+        const isin = a.isin!.trim().toUpperCase()
         const sym = displayTickerInTable(a)
-        out.push({
+        byIsin.set(isin, {
+          isin,
           assetId: a.id,
           assetGroupId: g.id,
           portfolioId: p.id,
-          label: `${p.name} → ${g.name} — ${sym} (${a.isin?.trim() || '—'})`,
+          label: `${p.name} → ${g.name} — ${sym} (${isin})`,
         })
       }
     }
   }
+  const out = [...byIsin.values()]
   out.sort((x, y) => x.label.localeCompare(y.label, undefined, { sensitivity: 'base' }))
   return out
 }
@@ -105,7 +116,7 @@ export default function StockValuations() {
   }, [load])
 
   const valValidation = useMemo(() => {
-    if (!valForm.assetId) return 'Holding is required.'
+    if (!valForm.isin) return 'Security is required.'
     if (!valForm.date) return 'Date is required.'
     if (Number.isNaN(Number(valForm.sharePrice)) || Number(valForm.sharePrice) < 0) return 'Share price must be a number (≥ 0).'
     return null
@@ -114,7 +125,7 @@ export default function StockValuations() {
   const openValCreate = () => {
     setValForm({
       ...valFormEmpty(),
-      assetId: holdings[0]?.assetId ?? '',
+      isin: holdings[0]?.isin ?? '',
     })
     setValEditing(null)
     setValPanelOpen(true)
@@ -123,7 +134,7 @@ export default function StockValuations() {
 
   const openValEdit = useCallback((v: SecurityValuation) => {
     setValForm({
-      assetId: v.assetId,
+      isin: v.isin,
       date: v.date.slice(0, 10),
       sharePrice: String(v.sharePrice),
       note: v.note ?? '',
@@ -149,7 +160,7 @@ export default function StockValuations() {
     try {
       const iso = new Date(valForm.date + 'T12:00:00').toISOString()
       const payload = {
-        assetId: valForm.assetId,
+        isin: valForm.isin,
         date: iso,
         sharePrice: parseFloat(valForm.sharePrice),
         note: valForm.note.trim() || null,
@@ -167,7 +178,7 @@ export default function StockValuations() {
   }
 
   const getStockValuationsAiPrompt = useCallback(
-    () => buildStockValuationsAiPrompt(holdings.map((h) => ({ assetId: h.assetId, label: h.label }))),
+    () => buildStockValuationsAiPrompt(holdings.map((h) => ({ assetId: h.isin, label: h.label }))),
     [holdings],
   )
 
@@ -223,7 +234,7 @@ export default function StockValuations() {
           const d = stockValuationNameDisplay(v)
           return [d.primary, d.ticker, d.isin].filter(Boolean).join(' ')
         },
-        getFilterValue: (v) => v.assetId,
+        getFilterValue: (v) => v.isin,
         filter: {
           type: 'select',
           getOptions: (all) => {
@@ -231,7 +242,7 @@ export default function StockValuations() {
             for (const r of all) {
               const d = stockValuationNameDisplay(r)
               const label = [d.primary, d.ticker, d.isin].filter(Boolean).join(' — ')
-              byId.set(r.assetId, label)
+              byId.set(r.isin, label)
             }
             const entries = [...byId.entries()].sort((a, b) => a[1].localeCompare(b[1], undefined, { sensitivity: 'base' }))
             return [{ value: '', label: 'All securities' }, ...entries.map(([id, label]) => ({ value: id, label }))]
@@ -367,11 +378,11 @@ export default function StockValuations() {
             </div>
             <div className="form-grid">
               <label className="span-2">
-                Holding *
-                <select value={valForm.assetId} onChange={(e) => setValForm((f) => ({ ...f, assetId: e.target.value }))}>
+                Security *
+                <select value={valForm.isin} onChange={(e) => setValForm((f) => ({ ...f, isin: e.target.value }))}>
                   <option value="">Select…</option>
                   {holdings.map((h) => (
-                    <option key={h.assetId} value={h.assetId}>
+                    <option key={h.isin} value={h.isin}>
                       {h.label}
                     </option>
                   ))}

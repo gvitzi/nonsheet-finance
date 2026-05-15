@@ -66,7 +66,10 @@ function computePositionFromLedger(doc: WealthDocument, assetId: string): number
 }
 
 function latestValuationForAsset(doc: WealthDocument, assetId: string) {
-  const rows = doc.securityValuations.filter((v) => v.assetId === assetId)
+  const asset = doc.assets.find((a) => a.id === assetId)
+  const isin = asset?.isin?.trim().toUpperCase() ?? ''
+  if (!isin) return null
+  const rows = doc.securityValuations.filter((v) => v.isin.trim().toUpperCase() === isin)
   if (!rows.length) return null
   return [...rows].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] ?? null
 }

@@ -117,10 +117,14 @@ export function computeDashboardSummary(doc: WealthDocument): DashboardSummaryPa
     txsByAsset.set(t.assetId, list)
   }
   const secValByAsset = new Map<string, Array<{ date: Date; sharePrice: number; currency: string }>>()
-  for (const v of doc.securityValuations) {
-    const list = secValByAsset.get(v.assetId) ?? []
-    list.push({ date: toDate(v.date), sharePrice: v.sharePrice, currency: v.currency })
-    secValByAsset.set(v.assetId, list)
+  for (const a of doc.assets) {
+    if (a.category !== 'securities') continue
+    const isin = a.isin?.trim().toUpperCase() ?? ''
+    if (!isin) continue
+    const rows = doc.securityValuations
+      .filter((v) => v.isin.trim().toUpperCase() === isin)
+      .map((v) => ({ date: toDate(v.date), sharePrice: v.sharePrice, currency: v.currency }))
+    secValByAsset.set(a.id, rows)
   }
   const assetValByAsset = new Map<string, typeof doc.assetValuations>()
   for (const v of doc.assetValuations) {

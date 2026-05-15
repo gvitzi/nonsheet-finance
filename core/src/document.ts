@@ -8,6 +8,7 @@
  */
 
 import type { GroupKind } from './index.js'
+import { decodeSecurityValuationId } from './markIds.js'
 
 export const WEALTH_DOCUMENT_SCHEMA_VERSION = 1 as const
 
@@ -197,8 +198,7 @@ export type SecurityInfoRecord = {
 
 export type SecurityValuationRecord = {
   id: string
-  assetId: string
-  isin?: string
+  isin: string
   date: string
   sharePrice: number
   currency: string
@@ -598,10 +598,12 @@ function parseSecurityInfo(o: unknown): SecurityInfoRecord {
 
 function parseSecurityValuation(o: unknown): SecurityValuationRecord {
   if (!isObj(o)) throw new WealthDocumentParseError('securityValuation item')
+  const id = reqStr(o, 'id')
+  const isin = (optStr(o, 'isin') ?? decodeSecurityValuationId(id)?.isin ?? '').trim().toUpperCase()
+  if (!isin) throw new WealthDocumentParseError('securityValuation.isin')
   return {
-    id: reqStr(o, 'id'),
-    assetId: reqStr(o, 'assetId'),
-    isin: optStr(o, 'isin') ?? undefined,
+    id,
+    isin,
     date: reqStr(o, 'date'),
     sharePrice: reqNum(o, 'sharePrice'),
     currency: typeof o.currency === 'string' ? o.currency : 'EUR',

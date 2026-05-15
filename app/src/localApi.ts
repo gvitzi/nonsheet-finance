@@ -210,24 +210,22 @@ function findSecurityValuation(doc: WealthDocument, id: string) {
   const dec = decodeSecurityValuationId(id)
   if (!dec) return undefined
   return doc.securityValuations.find((v) => {
-    const a = doc.assets.find((x) => x.id === v.assetId)
-    const isin = a?.isin?.trim().toUpperCase()
+    const isin = v.isin?.trim().toUpperCase()
     const dk = v.date.slice(0, 10)
-    if (dec.assetId) return v.assetId === dec.assetId && isin === dec.isin && dk === dec.dateKey
     return isin === dec.isin && dk === dec.dateKey
   })
 }
 
 function serializeSecurityValuation(doc: WealthDocument, v: (typeof doc.securityValuations)[0]): SecurityValuation {
-  const asset = doc.assets.find((a) => a.id === v.assetId)
-  const isinKey = asset?.isin?.trim().toUpperCase()
-  const inf = isinKey ? infoByIsin(doc).get(isinKey) : undefined
+  const isinKey = v.isin.trim().toUpperCase()
+  const inf = infoByIsin(doc).get(isinKey)
+  const matchingAssets = doc.assets.filter((a) => a.category === 'securities' && a.isin?.trim().toUpperCase() === isinKey)
+  const asset = matchingAssets[0]
   const ag = asset?.assetGroupId ? doc.assetGroups.find((g) => g.id === asset.assetGroupId) : undefined
   const pf = ag ? doc.portfolios.find((p) => p.id === ag.portfolioId) : undefined
   return {
     id: v.id,
-    assetId: v.assetId,
-    isin: v.isin ?? asset?.isin ?? undefined,
+    isin: isinKey,
     date: v.date,
     sharePrice: v.sharePrice,
     currency: v.currency,
@@ -246,7 +244,19 @@ function serializeSecurityValuation(doc: WealthDocument, v: (typeof doc.security
           securityName: inf?.name ?? null,
           assetGroup: ag && pf ? { id: ag.id, name: ag.name, portfolioId: pf.id } : null,
         }
-      : undefined,
+      : inf
+        ? {
+            id: '',
+            name: inf.name,
+            currency: v.currency,
+            category: 'securities',
+            assetGroupId: null,
+            isin: isinKey,
+            ticker: inf.ticker,
+            securityName: inf.name,
+            assetGroup: null,
+          }
+        : undefined,
   }
 }
 
@@ -847,7 +857,7 @@ export const api = {
           propertyRentPeriods: (d.propertyRentPeriods ?? []).filter((r) => !propertyIds.includes(r.propertyId)),
           assetValuations: d.assetValuations.filter((v) => !assetIds.includes(v.assetId)),
           securityTransactions: d.securityTransactions.filter((t) => !groupIds.includes(t.assetGroupId)),
-          securityValuations: d.securityValuations.filter((v) => !assetIds.includes(v.assetId)),
+          securityValuations: d.securityValuations,
         }
       })
       notifyPortfolios()
@@ -919,7 +929,7 @@ export const api = {
           propertyRentPeriods: (d.propertyRentPeriods ?? []).filter((r) => !propertyIds.includes(r.propertyId)),
           assetValuations: d.assetValuations.filter((v) => !assetIds.includes(v.assetId)),
           securityTransactions: d.securityTransactions.filter((t) => t.assetGroupId !== id),
-          securityValuations: d.securityValuations.filter((v) => !assetIds.includes(v.assetId)),
+          securityValuations: d.securityValuations,
         }
       })
       notifyPortfolios()
@@ -968,7 +978,7 @@ export const api = {
                     quantity: t.quantity,
                   })),
                 securityValuations: d.securityValuations
-                  .filter((v) => v.assetId === a.id)
+                  .filter((v) => v.isin.trim().toUpperCase() === (a.isin?.trim().toUpperCase() ?? ''))
                   .map((v) => ({ date: new Date(v.date), sharePrice: v.sharePrice, currency: v.currency })),
               }
             }),
@@ -1067,7 +1077,7 @@ export const api = {
           assets: d.assets.filter((a) => a.id !== id),
           assetValuations: d.assetValuations.filter((v) => v.assetId !== id),
           securityTransactions: d.securityTransactions.filter((t) => t.assetId !== id),
-          securityValuations: d.securityValuations.filter((v) => v.assetId !== id),
+          securityValuations: d.securityValuations,
         }
         if (isin) next = syncSecuritiesHoldingsByIsin(next, isin)
         return next
@@ -1279,49 +1289,24 @@ export const api = {
   },
 
   securityValuations: {
-    list: (assetGroupId?: string): Promise<SecurityValuation[]> => {
+    list: (_assetGroupId?: string): Promise<SecurityValuation[]> => {
       const d = getWealthDocument()
-      let assetIds: string[] = []
-      if (assetGroupId) {
-        const g = d.assetGroups.find((x) => x.id === assetGroupId)
-        if (!g) return rej(404, 'Asset group not found')
-        if (g.kind !== 'investments') return rej(400, 'Valuations are only for securities asset groups')
-        assetIds = d.assets.filter((a) => a.assetGroupId === assetGroupId && a.category === 'securities').map((a) => a.id)
-      } else {
-        const gids = d.assetGroups.filter((x) => x.kind === 'investments').map((x) => x.id)
-        if (!gids.length) return Promise.resolve([])
-        assetIds = d.assets.filter((a) => a.assetGroupId && gids.includes(a.assetGroupId) && a.category === 'securities').map((a) => a.id)
-      }
-      if (!assetIds.length) return Promise.resolve([])
-      const rows = d.securityValuations.filter((v) => assetIds.includes(v.assetId))
+      const rows = [...d.securityValuations].sort((a, b) => b.date.localeCompare(a.date) || a.isin.localeCompare(b.isin))
       return Promise.resolve(rows.map((r) => serializeSecurityValuation(d, r)))
     },
-    create: (data: SecurityValuationInput, assetGroupId?: string): Promise<SecurityValuation> => {
+    create: (data: SecurityValuationInput, _assetGroupId?: string): Promise<SecurityValuation> => {
       const d0 = getWealthDocument()
-      let gid = assetGroupId
-      const asset = d0.assets.find((a) => a.id === data.assetId)
-      if (!gid) {
-        if (!asset?.assetGroupId) return rej(404, 'Holding not found')
-        const ag = d0.assetGroups.find((g) => g.id === asset.assetGroupId)
-        if (!ag || ag.kind !== 'investments' || asset.category !== 'securities') {
-          return rej(400, 'Valuations apply to securities in an investments asset group only.')
-        }
-        gid = asset.assetGroupId
-      }
-      const g = d0.assetGroups.find((x) => x.id === gid)
-      if (!g || !asset) return rej(404, 'Not found')
-      if (g.kind !== 'investments' || asset.category !== 'securities' || asset.assetGroupId !== gid) {
-        return rej(400, 'Invalid holding')
-      }
-      if (!asset.isin?.trim()) return rej(400, 'Holding must have an ISIN; stock marks are keyed by ISIN.')
-      const isin = asset.isin.trim().toUpperCase()
+      const isin = data.isin.trim().toUpperCase()
+      if (!isin) return rej(400, 'ISIN is required.')
+      const info = d0.securityInfo.find((x) => x.isin === isin)
+      const asset = d0.assets.find((a) => a.category === 'securities' && a.isin?.trim().toUpperCase() === isin)
+      if (!info && !asset) return rej(400, 'Unknown ISIN. Add it in Stock Information first.')
       const dateKey = (typeof data.date === 'string' ? data.date : new Date(data.date as unknown as string).toISOString()).slice(0, 10)
-      const currency = (data.currency ?? asset.currency ?? 'USD').trim().toUpperCase()
+      const currency = (data.currency ?? info?.currency ?? asset?.currency ?? 'USD').trim().toUpperCase()
       const { createdAt, updatedAt } = newEntityTimestamps()
-      const id = securityValuationIdForAsset(isin, dateKey, data.assetId)
+      const id = securityValuationIdForAsset(isin, dateKey)
       const row = {
         id,
-        assetId: data.assetId,
         isin,
         date: `${dateKey}T12:00:00.000Z`,
         sharePrice: data.sharePrice,
@@ -1336,13 +1321,12 @@ export const api = {
           ...d,
           securityValuations: [...others, row],
         }
-        // Do not overwrite Stock Information (securityInfo); only add a stub when this ISIN is unknown.
         if (!d.securityInfo.some((x) => x.isin === isin)) {
           const now = nowIso()
           const infoRow = {
             isin,
-            ticker: asset.name,
-            name: asset.name,
+            ticker: asset?.name ?? isin,
+            name: asset?.name ?? isin,
             currency,
             updatedAt: now,
           }
@@ -1359,26 +1343,17 @@ export const api = {
       const d0 = getWealthDocument()
       const existing = findSecurityValuation(d0, id)
       if (!existing) return rej(404, 'Not found')
-      const assetBefore = d0.assets.find((a) => a.id === existing.assetId)
-      const assetGroupId = assetBefore?.assetGroupId
-      if (!assetGroupId) return rej(400, 'Holding has no asset group')
-      const g = d0.assetGroups.find((x) => x.id === assetGroupId)
-      if (!g || g.kind !== 'investments') return rej(400, 'Invalid asset group')
-      const nextAssetId = data.assetId ?? existing.assetId
-      const asset = d0.assets.find((a) => a.id === nextAssetId)
-      if (!asset || asset.category !== 'securities' || asset.assetGroupId !== assetGroupId) return rej(400, 'Invalid holding')
-      if (!asset.isin?.trim()) return rej(400, 'Holding must have an ISIN; stock marks are keyed by ISIN.')
-      const oldIsin = existing.isin ?? d0.assets.find((a) => a.id === existing.assetId)?.isin?.trim().toUpperCase() ?? ''
+      const oldIsin = existing.isin.trim().toUpperCase()
+      const nextIsin = (data.isin ?? existing.isin).trim().toUpperCase()
+      if (!nextIsin) return rej(400, 'ISIN is required.')
       const mergedDate = data.date ?? existing.date
       const dateKey = mergedDate.slice(0, 10)
-      const nextIsin = asset.isin.trim().toUpperCase()
-      const newId = securityValuationIdForAsset(nextIsin, dateKey, nextAssetId)
+      const newId = securityValuationIdForAsset(nextIsin, dateKey)
       const t = nowIso()
       updateWealthDocument((d) => {
         const rest = d.securityValuations.filter((v) => v.id !== existing.id)
         const row = {
           id: newId,
-          assetId: nextAssetId,
           isin: nextIsin,
           date: `${dateKey}T12:00:00.000Z`,
           sharePrice: data.sharePrice ?? existing.sharePrice,
@@ -1387,7 +1362,6 @@ export const api = {
           createdAt: existing.createdAt,
           updatedAt: t,
         }
-        // Editing a mark must not change securityInfo (ticker / name); that table is edited on Stock Information.
         let next: WealthDocument = {
           ...d,
           securityValuations: [...rest, row],
@@ -1406,7 +1380,7 @@ export const api = {
       const d0 = getWealthDocument()
       const existing = findSecurityValuation(d0, id)
       if (!existing) return rej(404, 'Not found')
-      const isin = existing.isin ?? d0.assets.find((a) => a.id === existing.assetId)?.isin?.trim().toUpperCase() ?? ''
+      const isin = existing.isin.trim().toUpperCase()
       updateWealthDocument((d) => {
         let next: WealthDocument = { ...d, securityValuations: d.securityValuations.filter((v) => v.id !== existing.id) }
         next = syncSecuritiesHoldingsByIsin(next, isin)
@@ -1437,17 +1411,8 @@ export const api = {
       for (const item of arr) {
         if (!item || typeof item !== 'object') continue
         const o = item as Record<string, unknown>
-        const assetId = typeof o.assetId === 'string' ? o.assetId.trim() : ''
-        if (!assetId) continue
-        const asset = d0.assets.find((a) => a.id === assetId)
-        if (!asset || asset.category !== 'securities') continue
-        const ag = asset.assetGroupId ? d0.assetGroups.find((g) => g.id === asset.assetGroupId) : undefined
-        if (!ag || ag.kind !== 'investments') continue
-        const isinFromAsset = asset.isin?.trim().toUpperCase() ?? ''
-        const isinFromRow = typeof o.isin === 'string' ? o.isin.trim().toUpperCase() : ''
-        const isin = isinFromRow || isinFromAsset
+        const isin = typeof o.isin === 'string' ? o.isin.trim().toUpperCase() : ''
         if (!isin) continue
-        if (isinFromRow && isinFromAsset && isinFromRow !== isinFromAsset) continue
         const dateSrc = o.date
         const dateStr =
           typeof dateSrc === 'string'
@@ -1465,20 +1430,16 @@ export const api = {
         const spRaw = o.sharePrice
         const sharePrice = typeof spRaw === 'number' ? spRaw : Number(spRaw)
         if (Number.isNaN(sharePrice) || sharePrice < 0) continue
-        const currency =
-          (typeof o.currency === 'string' && o.currency.trim()
-            ? o.currency.trim().toUpperCase()
-            : asset.currency?.trim().toUpperCase()) || 'USD'
+        const currency = (typeof o.currency === 'string' && o.currency.trim() ? o.currency.trim().toUpperCase() : 'USD') || 'USD'
         const note =
           o.note === undefined ? null : o.note === null ? null : typeof o.note === 'string' ? o.note : null
-        const id = securityValuationIdForAsset(isin, dateKey, assetId)
+        const id = securityValuationIdForAsset(isin, dateKey)
         const existing = d0.securityValuations.find((v) => v.id === id)
         const createdAt =
           typeof o.createdAt === 'string' && o.createdAt.trim() ? o.createdAt : existing?.createdAt ?? ts.createdAt
         const updatedAt = typeof o.updatedAt === 'string' && o.updatedAt.trim() ? o.updatedAt : ts.updatedAt
         coerced.push({
           id,
-          assetId,
           isin,
           date: `${dateKey}T12:00:00.000Z`,
           sharePrice,
@@ -1492,15 +1453,12 @@ export const api = {
       for (const row of coerced) lastById.set(row.id, row)
       const unique = [...lastById.values()]
       if (unique.length === 0 && mode === 'add') {
-        return rej(
-          400,
-          'No valid valuation rows to import. Each row needs assetId (a securities holding), date, sharePrice ≥ 0, and the holding must have an ISIN (or include isin matching the holding).',
-        )
+        return rej(400, 'No valid valuation rows to import. Each row needs isin, date, and sharePrice ≥ 0.')
       }
       updateWealthDocument((d) => {
         const prevIsins = new Set<string>()
         for (const v of d.securityValuations) {
-          const is = (v.isin ?? d.assets.find((a) => a.id === v.assetId)?.isin)?.trim().toUpperCase()
+          const is = v.isin?.trim().toUpperCase()
           if (is) prevIsins.add(is)
         }
         let valuations: SecurityValuationRecord[]
@@ -1513,14 +1471,12 @@ export const api = {
         let next: WealthDocument = { ...d, securityValuations: valuations }
         const si = [...d.securityInfo]
         for (const row of unique) {
-          const asset = d.assets.find((a) => a.id === row.assetId)
-          if (!asset || !row.isin) continue
           const isinKey = row.isin.trim().toUpperCase()
           if (si.some((x) => x.isin === isinKey)) continue
           si.push({
             isin: isinKey,
-            ticker: asset.name,
-            name: asset.name,
+            ticker: isinKey,
+            name: isinKey,
             currency: row.currency,
             updatedAt: row.updatedAt,
           })
