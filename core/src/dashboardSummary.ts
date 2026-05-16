@@ -242,7 +242,7 @@ export function computeDashboardSummary(doc: WealthDocument): DashboardSummaryPa
   }))
   const snapshotCount = snapshots.length
 
-  const manualAssets = assets.reduce((sum, a) => sum + cvt(a.estimatedValue, a.currency), 0)
+  const manualAssets = assets.filter((a) => !a.archivedAt).reduce((sum, a) => sum + cvt(a.estimatedValue, a.currency), 0)
   const manualLiabilities = liabilities.reduce((sum, l) => sum + cvt(l.outstandingBalance, l.currency), 0)
 
   let propertyAssetSum = 0
@@ -300,6 +300,7 @@ export function computeDashboardSummary(doc: WealthDocument): DashboardSummaryPa
   }
 
   for (const asset of assets) {
+    if (asset.archivedAt) continue
     if (!asset.assetGroupId || !assetGroupMap[asset.assetGroupId]) continue
     assetGroupMap[asset.assetGroupId].totalAssets += cvt(asset.estimatedValue, asset.currency)
   }
