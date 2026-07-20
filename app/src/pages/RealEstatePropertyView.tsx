@@ -1231,59 +1231,63 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
           <summary className="property-accordion__summary">
             <span className="property-accordion__title">Charts</span>
           </summary>
-          <div className="property-accordion__body stack">
-            {propertyChartsTimeline.length === 0 ? (
+          <div className="property-accordion__body">
+            {propertyChartsTimeline.length === 0 && propertyCashflowTimeline.length === 0 ? (
               <div className="empty-state">No historical data available.</div>
             ) : (
-              <div className="panel">
-                <h2 style={{ marginTop: 0 }}>Gross value, liabilities, and net worth</h2>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={propertyChartsTimeline}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                    <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => fmt(Number(v), latestValuation?.currency ?? 'EUR')} width={90} />
-                    <Tooltip formatter={(v, name) => [fmt(Number(v), latestValuation?.currency ?? 'EUR'), String(name)]} labelStyle={{ fontWeight: 600 }} />
-                    <Legend />
-                    <Line type="monotone" dataKey="gross" name="Gross value" stroke="#3b82f6" strokeWidth={2} dot={false} connectNulls />
-                    <Line type="monotone" dataKey="liabilities" name="Liabilities" stroke="#ef4444" strokeWidth={2} dot={false} connectNulls />
-                    <Line type="monotone" dataKey="netWorth" name="Net worth" stroke="#10b981" strokeWidth={2} dot={false} connectNulls />
-                  </LineChart>
-                </ResponsiveContainer>
+              <div className="panel-grid">
+                {propertyChartsTimeline.length > 0 ? (
+                  <div className="panel">
+                    <h2 style={{ marginTop: 0 }}>Gross value, liabilities, and net worth</h2>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <LineChart data={propertyChartsTimeline}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                        <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => fmt(Number(v), latestValuation?.currency ?? 'EUR')} width={90} />
+                        <Tooltip formatter={(v, name) => [fmt(Number(v), latestValuation?.currency ?? 'EUR'), String(name)]} labelStyle={{ fontWeight: 600 }} />
+                        <Legend />
+                        <Line type="monotone" dataKey="gross" name="Gross value" stroke="#3b82f6" strokeWidth={2} dot={false} connectNulls />
+                        <Line type="monotone" dataKey="liabilities" name="Liabilities" stroke="#ef4444" strokeWidth={2} dot={false} connectNulls />
+                        <Line type="monotone" dataKey="netWorth" name="Net worth" stroke="#10b981" strokeWidth={2} dot={false} connectNulls />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : null}
+
+                {propertyCashflowTimeline.length > 0 ? (
+                  <>
+                    <div className="panel">
+                      <h2 style={{ marginTop: 0 }}>Cumulative income and expenses</h2>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <LineChart data={propertyCashflowTimeline}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                          <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                          <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => fmt(Number(v), 'EUR')} width={90} />
+                          <Tooltip formatter={(v, name) => [fmt(Number(v), 'EUR'), String(name)]} labelStyle={{ fontWeight: 600 }} />
+                          <Legend />
+                          <Line type="monotone" dataKey="cumulativeIncome" name="Income" stroke="#3b82f6" strokeWidth={2} dot={false} connectNulls />
+                          <Line type="monotone" dataKey="cumulativeExpenses" name="Expenses" stroke="#ef4444" strokeWidth={2} dot={false} connectNulls />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    <div className="panel">
+                      <h2 style={{ marginTop: 0 }}>Cumulative cashflow</h2>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <LineChart data={propertyCashflowTimeline}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                          <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                          <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => fmt(Number(v), 'EUR')} width={90} />
+                          <Tooltip formatter={(v) => [fmt(Number(v), 'EUR'), 'Cashflow']} labelStyle={{ fontWeight: 600 }} />
+                          <Legend />
+                          <Line type="monotone" dataKey="cumulativeCashflow" name="Cashflow" stroke="#10b981" strokeWidth={2} dot={false} connectNulls />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </>
+                ) : null}
               </div>
             )}
-
-            {propertyCashflowTimeline.length > 0 ? (
-              <>
-                <div className="panel">
-                  <h2 style={{ marginTop: 0 }}>Cumulative income and expenses</h2>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={propertyCashflowTimeline}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => fmt(Number(v), 'EUR')} width={90} />
-                      <Tooltip formatter={(v, name) => [fmt(Number(v), 'EUR'), String(name)]} labelStyle={{ fontWeight: 600 }} />
-                      <Legend />
-                      <Line type="monotone" dataKey="cumulativeIncome" name="Income" stroke="#3b82f6" strokeWidth={2} dot={false} connectNulls />
-                      <Line type="monotone" dataKey="cumulativeExpenses" name="Expenses" stroke="#ef4444" strokeWidth={2} dot={false} connectNulls />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-
-                <div className="panel">
-                  <h2 style={{ marginTop: 0 }}>Cumulative cashflow</h2>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={propertyCashflowTimeline}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => fmt(Number(v), 'EUR')} width={90} />
-                      <Tooltip formatter={(v) => [fmt(Number(v), 'EUR'), 'Cashflow']} labelStyle={{ fontWeight: 600 }} />
-                      <Legend />
-                      <Line type="monotone" dataKey="cumulativeCashflow" name="Cashflow" stroke="#10b981" strokeWidth={2} dot={false} connectNulls />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </>
-            ) : null}
           </div>
         </details>
 
