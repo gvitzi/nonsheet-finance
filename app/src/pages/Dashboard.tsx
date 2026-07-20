@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Tooltip,
   ResponsiveContainer,
@@ -17,6 +18,7 @@ import { ApiError, api } from '../api'
 import type { DashboardSummary, GroupKind } from '../api'
 import { GROUP_KIND_LABELS, GROUP_KIND_ORDER, PORTFOLIOS_UPDATED_EVENT, labelForGroupKind } from '../groupKinds'
 import { GroupNavGlyph, resolveGroupNavIconId } from '../groupNavIcons'
+import { assetGroupHubPath } from '../portfolioPaths'
 
 const fmt = (n: number) => n.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const COLORS = ['#4f8ef7', '#34d399', '#f97316', '#a78bfa', '#f43f5e', '#facc15', '#22d3ee']
@@ -854,7 +856,7 @@ export default function Dashboard() {
                 <tr key={g.id}>
                   <td>{g.portfolioName}</td>
                   <td>
-                    <span className="dashboard-asset-group-cell">
+                    <Link className="dashboard-asset-group-cell dashboard-asset-group-cell--link" to={assetGroupHubPath(g.portfolioId, g.id)}>
                       <span className="dashboard-asset-group-cell__icon" style={{ color: groupColor }}>
                         <GroupNavGlyph
                           iconId={resolveGroupNavIconId(g.kind)}
@@ -862,7 +864,7 @@ export default function Dashboard() {
                         />
                       </span>
                       <span>{g.name}</span>
-                    </span>
+                    </Link>
                   </td>
                   <td>
                     <div className="positive">{fmtMoney(g.totalAssets, viewCurrencyCode)}</div>

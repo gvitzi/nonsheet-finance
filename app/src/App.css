@@ -1621,6 +1621,15 @@ body {
   height: 1.125rem;
 }
 
+.dashboard-asset-group-cell--link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.dashboard-asset-group-cell--link:hover {
+  text-decoration: underline;
+}
+
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
