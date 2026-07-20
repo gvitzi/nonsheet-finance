@@ -96,6 +96,10 @@ function assetMarkValueMetaBefore(
   return { value: eligible[0].value, currency: eligible[0].currency }
 }
 
+function zeroAssetFallback(vals: { date: Date; value: number; currency: string }[], assetCurrency: string): { value: number; currency: string } {
+  return vals[0] ? { value: 0, currency: vals[0].currency } : { value: 0, currency: assetCurrency }
+}
+
 function collectDates(properties: PropertySlice[], assets: AssetSlice[]): Date[] {
   const out: number[] = []
   const push = (d: Date) => out.push(d.getTime())
@@ -170,11 +174,7 @@ export function computeGroupHistory(
     }
     const allKeys = [...new Set([...dateKeys, toKey(new Date())])].sort()
     const series = allKeys.map((dk) => {
-      const meta = assetMarkValueMetaBefore(
-        asset.assetValuations,
-        asOf(dk),
-        { value: asset.estimatedValue, currency: asset.currency },
-      )
+      const meta = assetMarkValueMetaBefore(asset.assetValuations, asOf(dk), zeroAssetFallback(asset.assetValuations, asset.currency))
       return { date: dk, value: conv(meta.value, meta.currency, dk) }
     })
     items.push({ id: asset.id, name: asset.name, series })
@@ -291,10 +291,7 @@ export function computeNetWorthHistorySeries(input: {
         const px = sharePriceMetaAtDate(a.securityValuations, asOf)
         if (px != null && qty > 0) securitiesAssets += cvt(qty * px.sharePrice, px.currency)
       } else {
-        const meta = assetMarkValueMetaBefore(a.assetValuations, asOf, {
-          value: a.estimatedValue,
-          currency: a.currency,
-        })
+        const meta = assetMarkValueMetaBefore(a.assetValuations, asOf, zeroAssetFallback(a.assetValuations, a.currency))
         otherAssets += cvt(meta.value, meta.currency)
       }
     }
@@ -388,10 +385,7 @@ export function computeNetWorthByAssetGroupAtDates(input: {
         const px = sharePriceMetaAtDate(a.securityValuations, asOf)
         if (px != null && qty > 0) sums[gid] += cvt(qty * px.sharePrice, px.currency)
       } else {
-        const meta = assetMarkValueMetaBefore(a.assetValuations, asOf, {
-          value: a.estimatedValue,
-          currency: a.currency,
-        })
+        const meta = assetMarkValueMetaBefore(a.assetValuations, asOf, zeroAssetFallback(a.assetValuations, a.currency))
         sums[gid] += cvt(meta.value, meta.currency)
       }
     }
