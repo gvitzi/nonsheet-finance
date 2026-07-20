@@ -1602,7 +1602,8 @@ body {
   flex-shrink: 0;
 }
 
-/* Dashboard asset group summary: type icon (group color) + name */
+/* Dashboard asset group summary: portfolio icon + portfolio name, then type icon + group name */
+.dashboard-portfolio-cell,
 .dashboard-asset-group-cell {
   display: inline-flex;
   align-items: center;
@@ -1610,12 +1611,14 @@ body {
   vertical-align: middle;
 }
 
+.dashboard-portfolio-cell__icon,
 .dashboard-asset-group-cell__icon {
   display: inline-flex;
   flex-shrink: 0;
   line-height: 0;
 }
 
+.dashboard-portfolio-cell__icon .nav-icon,
 .dashboard-asset-group-cell__icon .nav-icon {
   width: 1.125rem;
   height: 1.125rem;

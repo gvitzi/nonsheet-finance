@@ -28,6 +28,7 @@ export type DashboardAssetGroupBreakdownPayload = {
   kind: string
   portfolioId: string
   portfolioName: string
+  portfolioIcon: string | null
   totalAssets: number
   totalLiabilities: number
   netWorth: number
@@ -293,6 +294,7 @@ export function computeDashboardSummary(doc: WealthDocument): DashboardSummaryPa
       kind: g.kind,
       portfolioId: g.portfolioId,
       portfolioName: pf?.name ?? '',
+      portfolioIcon: pf?.icon ?? null,
       totalAssets: 0,
       totalLiabilities: 0,
       netWorth: 0,

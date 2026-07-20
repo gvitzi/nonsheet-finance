@@ -17,7 +17,7 @@ import { convertAmountViaUsdFx, type FxRateRecord } from '@nonsheet-finance/core
 import { ApiError, api } from '../api'
 import type { DashboardSummary, GroupKind } from '../api'
 import { GROUP_KIND_LABELS, GROUP_KIND_ORDER, PORTFOLIOS_UPDATED_EVENT, labelForGroupKind } from '../groupKinds'
-import { GroupNavGlyph, resolveGroupNavIconId } from '../groupNavIcons'
+import { GroupNavGlyph, resolveGroupNavIconId, resolvePortfolioNavIconId } from '../groupNavIcons'
 import { assetGroupHubPath } from '../portfolioPaths'
 
 const fmt = (n: number) => n.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -854,7 +854,14 @@ export default function Dashboard() {
                 const groupColor = g.color?.trim() || COLORS[i % COLORS.length]
                 return (
                 <tr key={g.id}>
-                  <td>{g.portfolioName}</td>
+                  <td>
+                    <span className="dashboard-portfolio-cell">
+                      <span className="dashboard-portfolio-cell__icon">
+                        <GroupNavGlyph iconId={resolvePortfolioNavIconId(g.portfolioIcon)} title="Portfolio" />
+                      </span>
+                      <span>{g.portfolioName}</span>
+                    </span>
+                  </td>
                   <td>
                     <Link className="dashboard-asset-group-cell dashboard-asset-group-cell--link" to={assetGroupHubPath(g.portfolioId, g.id)}>
                       <span className="dashboard-asset-group-cell__icon" style={{ color: groupColor }}>

@@ -27,6 +27,7 @@ export type DashboardAssetGroupBreakdown = {
   kind: string
   portfolioId: string
   portfolioName: string
+  portfolioIcon: string | null
   totalAssets: number
   totalLiabilities: number
   netWorth: number
