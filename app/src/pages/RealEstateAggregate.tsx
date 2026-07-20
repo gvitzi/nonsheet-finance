@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode, type SyntheticEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { mortgageDebtContributionsAsOf } from '@nonsheet-finance/core'
@@ -132,7 +132,6 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
-  const [chartsOpen, setChartsOpen] = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -393,14 +392,12 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
       {banner?.type === 'err' ? <div className="page-error">{banner.text}</div> : null}
       {banner?.type === 'ok' ? <div className="page-success">{banner.text}</div> : null}
 
-      <StatsPanel assetGroupId={assetGroupId} displayCurrency={displayCurrency} items={statsItems} />
-
-      <div className="property-accordions" role="presentation">
-        <details className="property-accordion" open={chartsOpen} onToggle={(e: SyntheticEvent<HTMLDetailsElement>) => setChartsOpen(e.currentTarget.open)}>
-          <summary className="property-accordion__summary">
-            <span className="property-accordion__title">Charts</span>
-          </summary>
-          <div className="property-accordion__body stack">
+      <StatsPanel
+        assetGroupId={assetGroupId}
+        displayCurrency={displayCurrency}
+        items={statsItems}
+        extraCharts={
+          <div className="panel-grid">
             {propertyTimeline.data.length > 0 ? (
               <div className="panel">
                 <h2>Property values over time</h2>
@@ -455,8 +452,8 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
               </div>
             ) : null}
           </div>
-        </details>
-      </div>
+        }
+      />
 
       <div className="page-header">
         <h2>Properties</h2>

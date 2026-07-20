@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   CartesianGrid,
   Cell,
@@ -31,9 +31,10 @@ type Props = {
   /** ISO currency for chart labels (converted totals from `items`). */
   displayCurrency: string
   items: StatsPanelItem[]
+  extraCharts?: ReactNode
 }
 
-export default function StatsPanel({ assetGroupId, displayCurrency, items }: Props) {
+export default function StatsPanel({ assetGroupId, displayCurrency, items, extraCharts }: Props) {
   const fmtValue = (n: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: displayCurrency, maximumFractionDigits: 0 }).format(n)
   const [detailsOpen, setDetailsOpen] = useState(true)
@@ -184,6 +185,7 @@ export default function StatsPanel({ assetGroupId, displayCurrency, items }: Pro
             )}
           </div>
         </div>
+        {extraCharts ? <div className="stack" style={{ marginTop: '1rem' }}>{extraCharts}</div> : null}
       </div>
     </details>
   )
