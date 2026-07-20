@@ -509,6 +509,7 @@ export default function SecuritiesGroupHub({ group, portfolioId, assetGroupId }:
                 {rows.map((a) => {
                   const sp = sharePriceForAsset(a)
                   const mv = marketValueForAsset(a)
+                  const mvDisplay = mv != null && !Number.isNaN(mv) ? convert(mv, a.currency) : null
                   const closed = a.position != null && !Number.isNaN(a.position) && a.position === 0
                   const isin = a.isin?.trim().toUpperCase() ?? ''
                   const sym = displayTickerInTable(a)
@@ -526,7 +527,7 @@ export default function SecuritiesGroupHub({ group, portfolioId, assetGroupId }:
                       </td>
                       <td>{a.position != null && !Number.isNaN(a.position) ? fmtSharesTable(a.position) : '—'}</td>
                       <td>{sp != null && !Number.isNaN(sp) ? fmtMarkedSharePriceTable(sp, a.currency) : '—'}</td>
-                      <td className="positive">{mv != null && !Number.isNaN(mv) ? fmtMoney(mv, a.currency) : '—'}</td>
+                      <td className="positive">{mvDisplay != null && !Number.isNaN(mvDisplay) ? fmtMoney(mvDisplay, displayCurrency) : '—'}</td>
                       <td className="actions">
                         <button className="btn btn-sm" type="button" onClick={() => openMove(a)}>
                           Move
