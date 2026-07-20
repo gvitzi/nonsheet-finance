@@ -1033,11 +1033,14 @@ export const api = {
     create: (data: Partial<Asset>): Promise<Asset> => {
       const { createdAt, updatedAt } = newEntityTimestamps()
       const gid = data.assetGroupId ?? (data as { groupId?: string }).groupId ?? null
+      const d0 = getWealthDocument()
+      const group = gid ? d0.assetGroups.find((g) => g.id === gid) : undefined
+      const isGeneral = group?.kind === 'general'
       const row = {
         id: randomId(),
         name: data.name?.trim() || 'Asset',
         category: data.category ?? 'other',
-        estimatedValue: data.estimatedValue ?? 0,
+        estimatedValue: isGeneral ? 0 : (data.estimatedValue ?? 0),
         currency: data.currency ?? 'EUR',
         isin: data.isin ?? null,
         position: data.position ?? null,
@@ -1055,12 +1058,29 @@ export const api = {
     update: (id: string, data: Partial<Asset>): Promise<Asset> => {
       const t = nowIso()
       updateWealthDocument((d) => {
+        const existing = d.assets.find((a) => a.id === id)
+        const targetGroupId = data.assetGroupId ?? existing?.assetGroupId ?? null
+        const targetGroup = targetGroupId ? d.assetGroups.find((g) => g.id === targetGroupId) : undefined
+        const isGeneral = targetGroup?.kind === 'general'
+        const { estimatedValue: _ignoredEstimatedValue, ...restData } = data
         let next: WealthDocument = {
           ...d,
-          assets: d.assets.map((a) => (a.id === id ? { ...a, ...data, updatedAt: t } : a)),
+          assets: d.assets.map((a) =>
+            a.id === id
+              ? {
+                  ...a,
+                  ...restData,
+                  ...(isGeneral ? {} : data.estimatedValue !== undefined ? { estimatedValue: data.estimatedValue } : {}),
+                  updatedAt: t,
+                }
+              : a,
+          ),
         }
         if (next.assets.find((a) => a.id === id)?.category === 'securities') {
           next = syncSecuritiesHolding(next, id)
+        }
+        if (isGeneral) {
+          next = syncGeneralAssetEstimatedFromValuations(next, id)
         }
         return next
       })
