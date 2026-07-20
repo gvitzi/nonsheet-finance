@@ -82,19 +82,32 @@ function getPropertyListMetrics(p: Row) {
       : p.monthlyCashflow >= 0
         ? 'positive'
         : 'negative'
+
+  const mortgagePaymentValue = (() => {
+    const latestByLoan = new Map<string, PropertyMortgageEntry>()
+    for (const m of [...p.mortgageEntries].sort((a, b) => b.date.localeCompare(a.date))) {
+      if (!m.loanId || latestByLoan.has(m.loanId)) continue
+      latestByLoan.set(m.loanId, m)
+    }
+    if (latestByLoan.size > 0) {
+      let total = 0
+      for (const m of latestByLoan.values()) {
+        const principal = m.principalMonthlyPayment != null && !Number.isNaN(m.principalMonthlyPayment) ? m.principalMonthlyPayment : 0
+        const interest = m.interestMonthlyPayment != null && !Number.isNaN(m.interestMonthlyPayment) ? m.interestMonthlyPayment : 0
+        total += principal + interest
+      }
+      return total > 0 ? total : null
+    }
+    return p.monthlyMortgagePayment
+  })()
+
   return {
     value,
     liabilities,
     netValue,
     netValueClass,
     rent: fmtMonthly(p.effectiveMonthlyRent),
-    mortgagePayment: (() => {
-      const rentTotal = p.effectiveMonthlyRent + p.effectiveMonthlyHausgeld
-      if (p.monthlyCashflow != null && !Number.isNaN(p.monthlyCashflow)) {
-        return fmtMonthly(rentTotal - p.monthlyCashflow)
-      }
-      return fmtMonthly(p.monthlyMortgagePayment)
-    })(),
+    mortgagePayment: fmtMonthly(mortgagePaymentValue),
     cashflow: fmtMonthly(p.monthlyCashflow),
     cashflowClass,
   }
