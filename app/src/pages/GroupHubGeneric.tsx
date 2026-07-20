@@ -7,7 +7,7 @@ import { assetGroupAssetPath, assetGroupEditPath } from '../portfolioPaths'
 import { useDisplayMoney } from '../useDisplayMoney'
 import StatsPanel from './StatsPanel'
 
-const assetEmpty = { name: '', category: 'other', estimatedValue: '0', currency: 'EUR', note: '' }
+const assetEmpty = { name: '', category: 'other', currency: 'EUR', note: '' }
 const liabilityEmpty = { name: '', category: 'other', outstandingBalance: '0', currency: 'EUR', note: '' }
 
 const fmt = (n: number, currency = 'EUR') =>
@@ -68,7 +68,6 @@ export default function GroupHubGeneric({ group, portfolioId, assetGroupId }: Pr
   const assetValidation = useMemo(() => {
     if (!assetForm.name.trim()) return 'Asset name is required.'
     if (!assetForm.currency.trim() || assetForm.currency.trim().length !== 3) return 'Currency must be a 3-letter code.'
-    if (Number.isNaN(Number(assetForm.estimatedValue))) return 'Estimated value must be a number.'
     return null
   }, [assetForm])
 
@@ -108,7 +107,6 @@ export default function GroupHubGeneric({ group, portfolioId, assetGroupId }: Pr
     setAssetForm({
       name: a.name,
       category: a.category,
-      estimatedValue: String(a.estimatedValue),
       currency: a.currency,
       note: a.note ?? '',
     })
@@ -178,7 +176,6 @@ export default function GroupHubGeneric({ group, portfolioId, assetGroupId }: Pr
       const data = {
         name: assetForm.name.trim(),
         category: assetForm.category.trim(),
-        estimatedValue: parseFloat(assetForm.estimatedValue),
         currency: assetForm.currency.trim().toUpperCase(),
         assetGroupId: targetGroupId,
         note: assetForm.note.trim() || null,
@@ -358,15 +355,6 @@ export default function GroupHubGeneric({ group, portfolioId, assetGroupId }: Pr
                   value={assetForm.category}
                   onChange={(e) => setAssetForm((f) => ({ ...f, category: e.target.value }))}
                   placeholder="e.g. vehicle, savings"
-                />
-              </label>
-              <label>
-                Estimated value
-                <input
-                  type="number"
-                  step="0.01"
-                  value={assetForm.estimatedValue}
-                  onChange={(e) => setAssetForm((f) => ({ ...f, estimatedValue: e.target.value }))}
                 />
               </label>
               <label>
