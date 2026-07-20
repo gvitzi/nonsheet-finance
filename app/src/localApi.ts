@@ -1430,7 +1430,12 @@ export const api = {
         const spRaw = o.sharePrice
         const sharePrice = typeof spRaw === 'number' ? spRaw : Number(spRaw)
         if (Number.isNaN(sharePrice) || sharePrice < 0) continue
-        const currency = (typeof o.currency === 'string' && o.currency.trim() ? o.currency.trim().toUpperCase() : 'USD') || 'USD'
+        const info = d0.securityInfo.find((x) => x.isin === isin)
+      const asset = d0.assets.find((a) => a.category === 'securities' && a.isin?.trim().toUpperCase() === isin)
+      const inferredCurrency = info?.currency ?? asset?.currency ?? 'USD'
+      const currency =
+        (typeof o.currency === 'string' && o.currency.trim() ? o.currency.trim().toUpperCase() : inferredCurrency) ||
+        inferredCurrency
         const note =
           o.note === undefined ? null : o.note === null ? null : typeof o.note === 'string' ? o.note : null
         const id = securityValuationIdForAsset(isin, dateKey)
