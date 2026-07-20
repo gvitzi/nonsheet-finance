@@ -359,6 +359,111 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
     })
   }, [valuations, mortgages])
 
+  const propertyCashflowTimeline = useMemo(() => {
+    const startCandidates = [
+      property?.createdAt,
+      ...valuations.map((v) => v.date),
+      ...mortgages.map((m) => m.date),
+      ...expenses.map((e) => e.date),
+      ...rentPeriods.map((r) => r.startDate),
+    ].filter(Boolean) as string[]
+
+    if (startCandidates.length === 0) return [] as Array<Record<string, string | number>>
+
+    const start = new Date([...startCandidates].sort()[0]!)
+    const now = new Date()
+    const quarterStart = new Date(start.getFullYear(), Math.floor(start.getMonth() / 3) * 3, 1)
+
+    const isoDate = (d: Date) => {
+      const y = d.getFullYear()
+      const m = `${d.getMonth() + 1}`.padStart(2, '0')
+      const day = `${d.getDate()}`.padStart(2, '0')
+      return `${y}-${m}-${day}`
+    }
+
+    const addMonths = (d: Date, months: number) => new Date(d.getFullYear(), d.getMonth() + months, 1)
+    const quarterLabel = (d: Date) => `Q${Math.floor(d.getMonth() / 3) + 1} ${d.getFullYear()}`
+    const daysInMonth = (year: number, monthIndex: number) => new Date(year, monthIndex + 1, 0).getDate()
+
+    const monthIncome = (year: number, monthIndex: number) => {
+      const monthStart = new Date(year, monthIndex, 1)
+      const monthEnd = new Date(year, monthIndex + 1, 0)
+      const monthStartMs = monthStart.getTime()
+      const monthEndMs = monthEnd.getTime()
+      let total = 0
+      for (const period of rentPeriods) {
+        const periodStart = new Date(period.startDate)
+        const periodEnd = period.endDate ? new Date(period.endDate) : monthEnd
+        const overlapStart = Math.max(monthStartMs, periodStart.getTime())
+        const overlapEnd = Math.min(monthEndMs, periodEnd.getTime())
+        if (overlapEnd < overlapStart) continue
+        const coveredDays = Math.floor((overlapEnd - overlapStart) / 86400000) + 1
+        total += (period.rent * coveredDays) / daysInMonth(year, monthIndex)
+      }
+      return total
+    }
+
+    const mortgageRows = mortgages.map((m) => ({
+      date: m.date,
+      loanId: m.loanId,
+      outstandingBalance: m.outstandingBalance,
+      currency: m.currency,
+      principalMonthlyPayment: m.principalMonthlyPayment,
+      interestMonthlyPayment: m.interestMonthlyPayment,
+    }))
+
+    const monthMortgageExpense = (monthStart: Date) => {
+      const slices = mortgageLatestSlicesAsOf(mortgageRows, monthStart)
+      const loanIdSet = new Set(loans.map((l) => l.id))
+      const hasLoanMark = mortgages.some((m) => m.loanId && loanIdSet.has(m.loanId))
+      if (hasLoanMark) {
+        let total = 0
+        for (const s of slices) {
+          if (s.loanId && loanIdSet.has(s.loanId)) total += s.principalMonthly + s.interestMonthly
+        }
+        return total
+      }
+      if (property?.monthlyMortgagePayment != null && !Number.isNaN(property.monthlyMortgagePayment)) {
+        return property.monthlyMortgagePayment
+      }
+      return 0
+    }
+
+    const expenseByQuarter = new Map<string, number>()
+    for (const expense of expenses) {
+      const d = new Date(expense.date)
+      const qStart = new Date(d.getFullYear(), Math.floor(d.getMonth() / 3) * 3, 1)
+      const key = isoDate(qStart)
+      expenseByQuarter.set(key, (expenseByQuarter.get(key) ?? 0) + expense.amount)
+    }
+
+    const data: Array<Record<string, string | number>> = []
+    let cumulativeIncome = 0
+    let cumulativeExpenses = 0
+    for (let cursor = new Date(quarterStart); cursor <= now; cursor = addMonths(cursor, 3)) {
+      let quarterIncome = 0
+      let quarterMortgage = 0
+      for (let i = 0; i < 3; i += 1) {
+        const month = new Date(cursor.getFullYear(), cursor.getMonth() + i, 1)
+        if (month > now) break
+        quarterIncome += monthIncome(month.getFullYear(), month.getMonth())
+        quarterMortgage += monthMortgageExpense(month)
+      }
+      const key = isoDate(cursor)
+      const quarterRecordedExpenses = expenseByQuarter.get(key) ?? 0
+      cumulativeIncome += quarterIncome
+      cumulativeExpenses += quarterMortgage + quarterRecordedExpenses
+      data.push({
+        date: key,
+        label: quarterLabel(cursor),
+        cumulativeIncome,
+        cumulativeExpenses,
+        cumulativeCashflow: cumulativeIncome - cumulativeExpenses,
+      })
+    }
+    return data
+  }, [property, valuations, mortgages, expenses, rentPeriods, loans])
+
   const mortgageFinanceRead = useMemo(() => {
     const now = new Date()
     const markLike = mortgages.map((m) => ({
@@ -1153,6 +1258,55 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
                 </ResponsiveContainer>
               </div>
             )}
+
+            {propertyCashflowTimeline.length > 0 ? (
+              <>
+                <div className="panel">
+                  <h2 style={{ marginTop: 0 }}>Cumulative income, expenses, and cashflow</h2>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={propertyCashflowTimeline}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => fmt(Number(v), 'EUR')} width={90} />
+                      <Tooltip formatter={(v, name) => [fmt(Number(v), 'EUR'), String(name)]} labelStyle={{ fontWeight: 600 }} />
+                      <Legend />
+                      <Line type="monotone" dataKey="cumulativeIncome" name="Income" stroke="#3b82f6" strokeWidth={2} dot={false} connectNulls />
+                      <Line type="monotone" dataKey="cumulativeExpenses" name="Expenses" stroke="#ef4444" strokeWidth={2} dot={false} connectNulls />
+                      <Line type="monotone" dataKey="cumulativeCashflow" name="Cashflow" stroke="#10b981" strokeWidth={2} dot={false} connectNulls />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="panel">
+                  <h2 style={{ marginTop: 0 }}>Cumulative income and expenses</h2>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={propertyCashflowTimeline}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => fmt(Number(v), 'EUR')} width={90} />
+                      <Tooltip formatter={(v, name) => [fmt(Number(v), 'EUR'), String(name)]} labelStyle={{ fontWeight: 600 }} />
+                      <Legend />
+                      <Line type="monotone" dataKey="cumulativeIncome" name="Income" stroke="#3b82f6" strokeWidth={2} dot={false} connectNulls />
+                      <Line type="monotone" dataKey="cumulativeExpenses" name="Expenses" stroke="#ef4444" strokeWidth={2} dot={false} connectNulls />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="panel">
+                  <h2 style={{ marginTop: 0 }}>Cumulative cashflow</h2>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={propertyCashflowTimeline}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => fmt(Number(v), 'EUR')} width={90} />
+                      <Tooltip formatter={(v) => [fmt(Number(v), 'EUR'), 'Cashflow']} labelStyle={{ fontWeight: 600 }} />
+                      <Legend />
+                      <Line type="monotone" dataKey="cumulativeCashflow" name="Cashflow" stroke="#10b981" strokeWidth={2} dot={false} connectNulls />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </>
+            ) : null}
           </div>
         </details>
 
