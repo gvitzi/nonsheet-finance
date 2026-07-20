@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type SyntheticEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { mortgageDebtContributionsAsOf, mortgageLatestSlicesAsOf } from '@nonsheet-finance/core'
 import { ApiError, api } from '../api'
 import type { Property, PropertyExpense, PropertyLoan, PropertyMortgageEntry, PropertyRentPeriod, PropertyValuation } from '../api'
@@ -61,7 +62,7 @@ const loanEmpty = {
 }
 const rentPeriodEmpty = { startDate: '', endDate: '', rent: '', hausgeld: '0', tenantNames: '', notes: '' }
 
-type PropertyAccordionSection = 'valuations' | 'expenses' | 'mortgages' | 'rentPeriods'
+type PropertyAccordionSection = 'charts' | 'valuations' | 'expenses' | 'mortgages' | 'rentPeriods'
 
 export default function RealEstatePropertyView({ portfolioId, assetGroupId, propertyId, groupName }: Props) {
   const navigate = useNavigate()
@@ -141,7 +142,7 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
     setRentPeriodModalError(null)
   }, [])
 
-  const [openAccordionSection, setOpenAccordionSection] = useState<PropertyAccordionSection | null>('valuations')
+  const [openAccordionSection, setOpenAccordionSection] = useState<PropertyAccordionSection | null>('charts')
 
   const [selectedValuationId, setSelectedValuationId] = useState<string | null>(null)
   const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null)
@@ -318,6 +319,45 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
   const latestValuation = useMemo(() => {
     return sortedValuations[0] ?? null
   }, [sortedValuations])
+
+  const propertyChartsTimeline = useMemo(() => {
+    const allDates = [...new Set([...valuations.map((v) => v.date), ...mortgages.map((m) => m.date)])].sort()
+    if (allDates.length === 0) return [] as Array<Record<string, string | number>>
+
+    const latestValuationOnOrBefore = (date: string) => {
+      let last: PropertyValuation | null = null
+      for (const v of [...valuations].sort((a, b) => a.date.localeCompare(b.date))) {
+        if (v.date <= date) last = v
+        else break
+      }
+      return last
+    }
+
+    return allDates.map((date) => {
+      const v = latestValuationOnOrBefore(date)
+      const gross = v ? v.value : 0
+      const valCurrency = v?.currency ?? 'EUR'
+      const debtParts = mortgageDebtContributionsAsOf(
+        mortgages
+          .filter((m) => m.date <= date)
+          .map((m) => ({
+            date: m.date,
+            loanId: m.loanId,
+            outstandingBalance: m.outstandingBalance,
+            currency: m.currency,
+          })),
+        new Date(date),
+      )
+      const liabilities = debtParts.reduce((s, d) => s + (d.currency === valCurrency ? d.value : 0), 0)
+      return {
+        date,
+        gross,
+        liabilities,
+        netWorth: gross - liabilities,
+        currency: valCurrency,
+      }
+    })
+  }, [valuations, mortgages])
 
   const mortgageFinanceRead = useMemo(() => {
     const now = new Date()
@@ -1085,6 +1125,37 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
       </section>
 
       <div className="property-accordions" role="presentation">
+        <details
+          className="property-accordion"
+          open={openAccordionSection === 'charts'}
+          onToggle={(e) => onAccordionToggle('charts', e)}
+        >
+          <summary className="property-accordion__summary">
+            <span className="property-accordion__title">Charts</span>
+          </summary>
+          <div className="property-accordion__body stack">
+            {propertyChartsTimeline.length === 0 ? (
+              <div className="empty-state">No historical data available.</div>
+            ) : (
+              <div className="panel">
+                <h2 style={{ marginTop: 0 }}>Gross value, liabilities, and net worth</h2>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={propertyChartsTimeline}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => fmt(Number(v), latestValuation?.currency ?? 'EUR')} width={90} />
+                    <Tooltip formatter={(v, name) => [fmt(Number(v), latestValuation?.currency ?? 'EUR'), String(name)]} labelStyle={{ fontWeight: 600 }} />
+                    <Legend />
+                    <Line type="monotone" dataKey="gross" name="Gross value" stroke="#3b82f6" strokeWidth={2} dot={false} connectNulls />
+                    <Line type="monotone" dataKey="liabilities" name="Liabilities" stroke="#ef4444" strokeWidth={2} dot={false} connectNulls />
+                    <Line type="monotone" dataKey="netWorth" name="Net worth" stroke="#10b981" strokeWidth={2} dot={false} connectNulls />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        </details>
+
         <details
           className="property-accordion"
           open={openAccordionSection === 'valuations'}
