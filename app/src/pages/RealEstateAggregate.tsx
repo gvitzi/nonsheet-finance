@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode, type SyntheticEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { mortgageDebtContributionsAsOf } from '@nonsheet-finance/core'
@@ -132,6 +132,7 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
+  const [chartsOpen, setChartsOpen] = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -222,6 +223,47 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
     })
 
     return { data, keys }
+  }, [rows, convert])
+
+  const aggregateTimeline = useMemo(() => {
+    const allDates = [...new Set(rows.flatMap((p) => [...p.valuations.map((v) => v.date), ...p.mortgageEntries.map((m) => m.date)]))].sort()
+    if (allDates.length === 0) return [] as Array<Record<string, string | number>>
+
+    const latestValuationOnOrBefore = (vals: PropertyValuation[], date: string): PropertyValuation | null => {
+      let last: PropertyValuation | null = null
+      for (const v of [...vals].sort((a, b) => a.date.localeCompare(b.date))) {
+        if (v.date <= date) last = v
+        else break
+      }
+      return last
+    }
+
+    return allDates.map((date) => {
+      let gross = 0
+      let liabilities = 0
+      for (const p of rows) {
+        const v = latestValuationOnOrBefore(p.valuations, date)
+        if (v) gross += convert(v.value, v.currency)
+        const debt = mortgageDebtContributionsAsOf(
+          p.mortgageEntries
+            .filter((m) => m.date <= date)
+            .map((m) => ({
+              date: m.date,
+              loanId: m.loanId,
+              outstandingBalance: m.outstandingBalance,
+              currency: m.currency,
+            })),
+          new Date(date),
+        )
+        for (const d of debt) liabilities += convert(d.value, d.currency)
+      }
+      return {
+        date,
+        gross,
+        liabilities,
+        netWorth: gross - liabilities,
+      }
+    })
   }, [rows, convert])
 
   const tableTotals = useMemo(() => {
@@ -353,41 +395,68 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
 
       <StatsPanel assetGroupId={assetGroupId} displayCurrency={displayCurrency} items={statsItems} />
 
-      {propertyTimeline.data.length > 0 ? (
-        <div className="panel">
-          <h2>Property values over time</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={propertyTimeline.data}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => fmt(Number(v), displayCurrency)} width={90} />
-              <Tooltip formatter={(v, name) => [fmt(Number(v), displayCurrency), name]} labelStyle={{ fontWeight: 600 }} />
-              <Legend />
-              {propertyTimeline.keys.map((key, i) => (
-                <Line
-                  key={key}
-                  type="monotone"
-                  dataKey={key}
-                  stroke={CHART_PALETTE[i % CHART_PALETTE.length]}
-                  strokeWidth={2}
-                  dot={false}
-                  connectNulls
-                />
-              ))}
-              <Line
-                type="monotone"
-                name="Total"
-                dataKey={TOTAL_LINE_KEY}
-                stroke={TOTAL_LINE_STROKE}
-                strokeWidth={2}
-                strokeDasharray="6 4"
-                dot={false}
-                connectNulls
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      ) : null}
+      <div className="property-accordions" role="presentation">
+        <details className="property-accordion" open={chartsOpen} onToggle={(e: SyntheticEvent<HTMLDetailsElement>) => setChartsOpen(e.currentTarget.open)}>
+          <summary className="property-accordion__summary">
+            <span className="property-accordion__title">Charts</span>
+          </summary>
+          <div className="property-accordion__body stack">
+            {propertyTimeline.data.length > 0 ? (
+              <div className="panel">
+                <h2>Property values over time</h2>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={propertyTimeline.data}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => fmt(Number(v), displayCurrency)} width={90} />
+                    <Tooltip formatter={(v, name) => [fmt(Number(v), displayCurrency), name]} labelStyle={{ fontWeight: 600 }} />
+                    <Legend />
+                    {propertyTimeline.keys.map((key, i) => (
+                      <Line
+                        key={key}
+                        type="monotone"
+                        dataKey={key}
+                        stroke={CHART_PALETTE[i % CHART_PALETTE.length]}
+                        strokeWidth={2}
+                        dot={false}
+                        connectNulls
+                      />
+                    ))}
+                    <Line
+                      type="monotone"
+                      name="Total"
+                      dataKey={TOTAL_LINE_KEY}
+                      stroke={TOTAL_LINE_STROKE}
+                      strokeWidth={2}
+                      strokeDasharray="6 4"
+                      dot={false}
+                      connectNulls
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            ) : null}
+
+            {aggregateTimeline.length > 0 ? (
+              <div className="panel">
+                <h2>Gross value, liabilities, and net worth</h2>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={aggregateTimeline}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => fmt(Number(v), displayCurrency)} width={90} />
+                    <Tooltip formatter={(v, name) => [fmt(Number(v), displayCurrency), String(name)]} labelStyle={{ fontWeight: 600 }} />
+                    <Legend />
+                    <Line type="monotone" dataKey="gross" name="Gross value" stroke="#3b82f6" strokeWidth={2} dot={false} connectNulls />
+                    <Line type="monotone" dataKey="liabilities" name="Liabilities" stroke="#ef4444" strokeWidth={2} dot={false} connectNulls />
+                    <Line type="monotone" dataKey="netWorth" name="Net worth" stroke="#10b981" strokeWidth={2} dot={false} connectNulls />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            ) : null}
+          </div>
+        </details>
+      </div>
 
       <div className="page-header">
         <h2>Properties</h2>
