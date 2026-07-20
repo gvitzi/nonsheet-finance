@@ -360,17 +360,10 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
   }, [valuations, mortgages])
 
   const propertyCashflowTimeline = useMemo(() => {
-    const startCandidates = [
-      property?.createdAt,
-      ...valuations.map((v) => v.date),
-      ...mortgages.map((m) => m.date),
-      ...expenses.map((e) => e.date),
-      ...rentPeriods.map((r) => r.startDate),
-    ].filter(Boolean) as string[]
+    const rentPeriodStarts = rentPeriods.map((r) => r.startDate).filter(Boolean).sort()
+    if (rentPeriodStarts.length === 0) return [] as Array<Record<string, string | number>>
 
-    if (startCandidates.length === 0) return [] as Array<Record<string, string | number>>
-
-    const start = new Date([...startCandidates].sort()[0]!)
+    const start = new Date(rentPeriodStarts[0]!)
     const now = new Date()
     const quarterStart = new Date(start.getFullYear(), Math.floor(start.getMonth() / 3) * 3, 1)
 
@@ -1261,22 +1254,6 @@ export default function RealEstatePropertyView({ portfolioId, assetGroupId, prop
 
             {propertyCashflowTimeline.length > 0 ? (
               <>
-                <div className="panel">
-                  <h2 style={{ marginTop: 0 }}>Cumulative income, expenses, and cashflow</h2>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={propertyCashflowTimeline}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => fmt(Number(v), 'EUR')} width={90} />
-                      <Tooltip formatter={(v, name) => [fmt(Number(v), 'EUR'), String(name)]} labelStyle={{ fontWeight: 600 }} />
-                      <Legend />
-                      <Line type="monotone" dataKey="cumulativeIncome" name="Income" stroke="#3b82f6" strokeWidth={2} dot={false} connectNulls />
-                      <Line type="monotone" dataKey="cumulativeExpenses" name="Expenses" stroke="#ef4444" strokeWidth={2} dot={false} connectNulls />
-                      <Line type="monotone" dataKey="cumulativeCashflow" name="Cashflow" stroke="#10b981" strokeWidth={2} dot={false} connectNulls />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-
                 <div className="panel">
                   <h2 style={{ marginTop: 0 }}>Cumulative income and expenses</h2>
                   <ResponsiveContainer width="100%" height={300}>
