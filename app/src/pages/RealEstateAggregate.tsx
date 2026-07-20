@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { mortgageDebtContributionsAsOf } from '@nonsheet-finance/core'
 import { ApiError, api } from '../api'
 import type { AssetGroup, Property, PropertyMortgageEntry, PropertyValuation } from '../api'
@@ -9,6 +10,13 @@ import StatsPanel from './StatsPanel'
 
 const fmt = (n: number, currency = 'EUR') =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 2 }).format(n)
+
+const CHART_PALETTE = [
+  '#6366f1', '#f59e0b', '#10b981', '#ef4444', '#3b82f6',
+  '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#84cc16',
+]
+const TOTAL_LINE_KEY = '__totalPropertyValue'
+const TOTAL_LINE_STROKE = '#94a3b8'
 
 const fmtMonthly = (n: number | null | undefined) =>
   n != null && !Number.isNaN(n) ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n) : '—'
@@ -24,7 +32,7 @@ function latestByDate<T extends { date: string }>(rows: T[]): T | undefined {
   return [...rows].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
 }
 
-type Row = Property & { latestValuation?: PropertyValuation | null; mortgageEntries: PropertyMortgageEntry[] }
+type Row = Property & { latestValuation?: PropertyValuation | null; valuations: PropertyValuation[]; mortgageEntries: PropertyMortgageEntry[] }
 
 function mortgageDebtDisplay(mgs: PropertyMortgageEntry[]): string {
   const cont = mortgageDebtContributionsAsOf(
@@ -139,6 +147,7 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
           return {
             ...p,
             latestValuation: latestByDate(vals) ?? null,
+            valuations: vals,
             mortgageEntries: mgs,
           }
         }),
@@ -176,6 +185,44 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
       }),
     [rows, convert],
   )
+
+  const propertyTimeline = useMemo(() => {
+    const allDates = [...new Set(rows.flatMap((p) => p.valuations.map((v) => v.date)))].sort()
+    if (allDates.length === 0) return { data: [], keys: [] as string[] }
+
+    const withHistory = rows
+      .filter((p) => p.valuations.length > 0)
+      .map((p) => ({
+        name: p.name,
+        points: [...p.valuations].sort((a, b) => a.date.localeCompare(b.date)),
+      }))
+    const keys = withHistory.map((p) => p.name)
+
+    const valueOnOrBefore = (points: PropertyValuation[], date: string): number | null => {
+      let last: PropertyValuation | null = null
+      for (const p of points) {
+        if (p.date <= date) last = p
+        else break
+      }
+      return last ? convert(last.value, last.currency) : null
+    }
+
+    const data = allDates.map((date) => {
+      const point: Record<string, string | number> = { date }
+      let total = 0
+      for (const p of withHistory) {
+        const v = valueOnOrBefore(p.points, date)
+        if (v != null && !Number.isNaN(v)) {
+          point[p.name] = v
+          total += v
+        }
+      }
+      point[TOTAL_LINE_KEY] = total
+      return point
+    })
+
+    return { data, keys }
+  }, [rows, convert])
 
   const tableTotals = useMemo(() => {
     let sumValue = 0
@@ -305,6 +352,42 @@ export default function RealEstateAggregate({ group, portfolioId, assetGroupId }
       {banner?.type === 'ok' ? <div className="page-success">{banner.text}</div> : null}
 
       <StatsPanel assetGroupId={assetGroupId} displayCurrency={displayCurrency} items={statsItems} />
+
+      {propertyTimeline.data.length > 0 ? (
+        <div className="panel">
+          <h2>Property values over time</h2>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={propertyTimeline.data}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => fmt(Number(v), displayCurrency)} width={90} />
+              <Tooltip formatter={(v, name) => [fmt(Number(v), displayCurrency), name]} labelStyle={{ fontWeight: 600 }} />
+              <Legend />
+              {propertyTimeline.keys.map((key, i) => (
+                <Line
+                  key={key}
+                  type="monotone"
+                  dataKey={key}
+                  stroke={CHART_PALETTE[i % CHART_PALETTE.length]}
+                  strokeWidth={2}
+                  dot={false}
+                  connectNulls
+                />
+              ))}
+              <Line
+                type="monotone"
+                name="Total"
+                dataKey={TOTAL_LINE_KEY}
+                stroke={TOTAL_LINE_STROKE}
+                strokeWidth={2}
+                strokeDasharray="6 4"
+                dot={false}
+                connectNulls
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      ) : null}
 
       <div className="page-header">
         <h2>Properties</h2>
